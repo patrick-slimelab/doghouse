@@ -16,8 +16,14 @@ services:
       # Point Scoob's OpenAI-compatible client to the host ooba server
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-http://host.docker.internal:5000}
 
+      # Help TUIs behave
+      TERM: xterm-256color
+
       # Keep Node quieter
       NODE_ENV: production
+
+    stdin_open: true
+    tty: true
 
     # Persist ONLY Scoob's own state
     volumes:
