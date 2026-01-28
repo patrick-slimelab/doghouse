@@ -28,9 +28,13 @@ RUN corepack enable \
 # Ensure runtime user owns the app dir
 RUN chown -R node:node /home/node/moltbot
 
+# Expose CLI on PATH (so `moltbot` / `clawdbot` work inside the container)
+RUN ln -sf /home/node/moltbot/moltbot.mjs /usr/local/bin/moltbot \
+ && ln -sf /home/node/moltbot/moltbot.mjs /usr/local/bin/clawdbot
+
 # Run
 # NOTE: we run the gateway in the foreground so docker can manage restarts.
-# Scoob will need to run `moltbot onboard` in the container volume on first boot.
+# Scoob will need to run onboarding once; state persists in the docker volume.
 
 ENV HOME=/home/node
 
