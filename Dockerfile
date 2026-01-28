@@ -9,16 +9,16 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 
 # Non-root user
-RUN useradd -m -u 1000 app
-USER app
-WORKDIR /home/app
+# The official node image already has a non-root user `node` (uid 1000).
+USER node
+WORKDIR /home/node
 
 # Clone Moltbot and checkout the requested ref
 RUN git clone ${MOLTBOT_REPO} moltbot \
  && cd moltbot \
  && git checkout ${MOLTBOT_REF}
 
-WORKDIR /home/app/moltbot
+WORKDIR /home/node/moltbot
 
 # Install + build
 RUN corepack enable \
@@ -29,6 +29,6 @@ RUN corepack enable \
 # NOTE: we run the gateway in the foreground so docker can manage restarts.
 # Scoob will need to run `moltbot onboard` in the container volume on first boot.
 
-ENV HOME=/home/app
+ENV HOME=/home/node
 ENTRYPOINT ["/usr/bin/tini","--"]
 CMD ["node","./moltbot.mjs","gateway","start","--foreground"]
