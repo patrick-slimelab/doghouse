@@ -25,9 +25,9 @@ RUN corepack enable \
 # Runtime image
 FROM node:22-bookworm
 
-# Minimal deps for runtime + entrypoint privilege drop + sudo
+# Minimal deps for runtime + entrypoint privilege drop + sudo + curl/jq (for model probing)
 RUN apt-get update \
- && apt-get install -y --no-install-recommends ca-certificates tini gosu sudo \
+ && apt-get install -y --no-install-recommends ca-certificates tini gosu sudo curl jq \
  && rm -rf /var/lib/apt/lists/*
 
 # Create scoob user (passwordless sudo *inside the container*)

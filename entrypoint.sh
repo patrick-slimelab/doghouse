@@ -56,17 +56,19 @@ fi
 echo "[doghouse] Enforcing agents.defaults.workspace=$WORKSPACE_DIR"
 gosu scoob /usr/local/bin/moltbot config set agents.defaults.workspace "$WORKSPACE_DIR" || true
 
-# Open DMs (disable pairing) for Scoob on Discord + Matrix
+# Open DMs and Group channels for Scoob on Discord + Matrix
 # This makes the bot reachable to anyone via DM.
-echo "[doghouse] Configuring Discord DMs: open"
+echo "[doghouse] Configuring Discord channels: open"
 gosu scoob /usr/local/bin/moltbot config set channels.discord.enabled true || true
 gosu scoob /usr/local/bin/moltbot config set channels.discord.dm.policy "open" || true
 gosu scoob /usr/local/bin/moltbot config set channels.discord.dm.allowFrom "['*']" || true
+gosu scoob /usr/local/bin/moltbot config set channels.discord.groupPolicy "open" || true
 
-echo "[doghouse] Configuring Matrix DMs: open"
+echo "[doghouse] Configuring Matrix channels: open"
 gosu scoob /usr/local/bin/moltbot config set channels.matrix.enabled true || true
 gosu scoob /usr/local/bin/moltbot config set channels.matrix.dm.policy "open" || true
 gosu scoob /usr/local/bin/moltbot config set channels.matrix.dm.allowFrom "['*']" || true
+gosu scoob /usr/local/bin/moltbot config set channels.matrix.groupPolicy "open" || true
 
 # Ensure gateway is allowed to run (required even after setup if mode is still unset)
 MODE="$(gosu scoob /usr/local/bin/moltbot config get gateway.mode 2>/dev/null || true)"
@@ -85,6 +87,20 @@ if [[ -n "${OPENAI_BASE_URL:-}" ]]; then
   echo "[doghouse] Configuring OpenAI provider -> $BASE"
   # Set the whole provider object in one go so schema validation passes.
   gosu scoob /usr/local/bin/moltbot config set models.providers.openai "{api: 'openai-completions', baseUrl: '$BASE', apiKey: 'ooba', models: []}" || true
+
+  # Auto-detect loaded model from ooba (localhost:5000/v1/models)
+  echo "[doghouse] Probing ooba for loaded model..."
+  if MODEL_ID=$(curl -s "$BASE/models" | jq -r '.data[0].id // empty'); then
+    if [[ -n "$MODEL_ID" ]]; then
+      echo "[doghouse] Detected model: $MODEL_ID"
+      # Set it as the default primary model
+      gosu scoob /usr/local/bin/moltbot config set agents.defaults.model.primary "openai/$MODEL_ID" || true
+    else
+      echo "[doghouse] Warn: No models returned from $BASE/models"
+    fi
+  else
+    echo "[doghouse] Warn: Failed to query $BASE/models (is ooba running?)"
+  fi
 fi
 
 # Finally run the gateway as scoob
