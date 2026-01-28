@@ -22,10 +22,10 @@ services:
         MOLTBOT_REPO: https://github.com/patrick-slimelab/moltbot.git
         MOLTBOT_REF: ${MOLTBOT_REF:-main}
     container_name: doghouse
+    restart: unless-stopped
     depends_on:
       doghouse-init:
         condition: service_completed_successfully
-    restart: unless-stopped
 
     # Allow container to reach host services without --network=host
     extra_hosts:
@@ -60,6 +60,7 @@ services:
       - matrix_user_id
       - matrix_password
       - gateway_token
+      - authorized_keys
 
     # Lockdown (prevents easy host escape)
     read_only: true
@@ -76,9 +77,10 @@ services:
       - SETUID
       - SETGID
 
-    # If Scoob needs to bind ports, add explicit mappings here.
-    # ports:
-    #   - "${DOGHOUSE_PORT:-7861}:7860"
+    # Expose SSH (2222->2222) and Gateway (7861->18789 if needed)
+    ports:
+      - "127.0.0.1:2222:2222"
+      # - "${DOGHOUSE_PORT:-7861}:7860"
 
 secrets:
   discord_bot_token:
@@ -91,6 +93,8 @@ secrets:
     file: ./secrets/matrix_password
   gateway_token:
     file: ./secrets/gateway_token
+  authorized_keys:
+    file: ./secrets/authorized_keys
 
 volumes:
   doghouse_state:

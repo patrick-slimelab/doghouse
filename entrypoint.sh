@@ -37,6 +37,20 @@ if gt="$(read_secret /run/secrets/gateway_token)"; then
   echo "[doghouse] Loaded CLAWDBOT_GATEWAY_TOKEN from docker secret"
 fi
 
+# Configure SSH if authorized_keys secret is present
+if [[ -f /run/secrets/authorized_keys ]]; then
+  echo "[doghouse] Setting up SSH authorized_keys..."
+  mkdir -p /home/scoob/.ssh
+  cat /run/secrets/authorized_keys > /home/scoob/.ssh/authorized_keys
+  chown -R scoob:scoob /home/scoob/.ssh
+  chmod 700 /home/scoob/.ssh
+  chmod 600 /home/scoob/.ssh/authorized_keys
+  
+  # Start sshd in background (as root, before dropping privs)
+  echo "[doghouse] Starting sshd on port 2222..."
+  /usr/sbin/sshd -D -e &
+fi
+
 WORKSPACE_DIR="${DOGHOUSE_WORKSPACE:-$HOME/clawd}"
 
 # Ensure state + workspace dirs exist + are writable by scoob
