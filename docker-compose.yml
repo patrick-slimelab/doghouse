@@ -66,6 +66,7 @@ services:
     read_only: true
     tmpfs:
       - /tmp
+      - /run
 
     security_opt:
       - no-new-privileges:true
