@@ -45,7 +45,12 @@ chown -R scoob:scoob "$STATE_DIR" "$WORKSPACE_DIR" 2>/dev/null || true
 if [[ ! -f "$CFG_PATH" ]]; then
   echo "[doghouse] First run: moltbot setup"
   gosu scoob /usr/local/bin/moltbot setup --workspace "$WORKSPACE_DIR"
-  # Required so `moltbot gateway run` won't refuse to start.
+fi
+
+# Ensure gateway is allowed to run (required even after setup if mode is still unset)
+MODE="$(gosu scoob /usr/local/bin/moltbot config get gateway.mode 2>/dev/null || true)"
+if [[ -z "${MODE// }" || "$MODE" == "null" ]]; then
+  echo "[doghouse] Setting gateway.mode=local"
   gosu scoob /usr/local/bin/moltbot config set gateway.mode local || true
 fi
 
