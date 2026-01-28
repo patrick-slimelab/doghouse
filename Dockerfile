@@ -5,11 +5,10 @@ ARG MOLTBOT_REF
 
 # Minimal deps for building + git operations
 RUN apt-get update \
- && apt-get install -y --no-install-recommends git ca-certificates openssh-client tini \
+ && apt-get install -y --no-install-recommends git ca-certificates openssh-client tini gosu \
  && rm -rf /var/lib/apt/lists/*
 
-# We'll build as root (needs permission to enable corepack / install deps),
-# then drop to the built-in non-root user `node` (uid 1000) at runtime.
+# We'll build as root (needs permission to enable corepack / install deps).
 USER root
 WORKDIR /home/node
 
@@ -25,7 +24,8 @@ RUN corepack enable \
  && pnpm install --frozen-lockfile \
  && pnpm build
 
-# Ensure runtime user owns the app dir
+# Ensure runtime user owns the app dir (avoid slow recursive chown if possible)
+# NOTE: this is still somewhat expensive because node_modules is large.
 RUN chown -R node:node /home/node/moltbot
 
 # Expose CLI on PATH (so `moltbot` / `clawdbot` work inside the container)
@@ -38,10 +38,9 @@ RUN ln -sf /home/node/moltbot/moltbot.mjs /usr/local/bin/moltbot \
 
 ENV HOME=/home/node
 
-USER node
+COPY entrypoint.sh /usr/local/bin/doghouse-entrypoint
+RUN chmod +x /usr/local/bin/doghouse-entrypoint
 
-COPY --chown=node:node entrypoint.sh /home/node/entrypoint.sh
-RUN chmod +x /home/node/entrypoint.sh
-
-ENTRYPOINT ["/usr/bin/tini","--","/home/node/entrypoint.sh"]
+# Run entrypoint as root so it can fix volume ownership, then drop to node.
+ENTRYPOINT ["/usr/bin/tini","--","/usr/local/bin/doghouse-entrypoint"]
 CMD ["node","./moltbot.mjs","gateway","start","--foreground"]

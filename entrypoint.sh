@@ -1,13 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Ensure state dir exists
-mkdir -p "$HOME/.clawdbot"
+STATE_DIR="${CLAWDBOT_STATE_DIR:-$HOME/.moltbot}"
+CFG_PATH="${CLAWDBOT_CONFIG_PATH:-$STATE_DIR/moltbot.json}"
+
+# Ensure state dir exists + is writable by node
+mkdir -p "$STATE_DIR"
+chown -R node:node "$STATE_DIR" || true
 
 # One-time non-interactive bootstrap (no TUI)
-if [[ ! -f "$HOME/.clawdbot/moltbot.json" ]]; then
+if [[ ! -f "$CFG_PATH" ]]; then
   echo "[doghouse] First run: moltbot setup"
-  /usr/local/bin/moltbot setup --workspace "$HOME/clawd"
+  # Run setup as node so it writes files with the correct ownership.
+  gosu node /usr/local/bin/moltbot setup --workspace "$HOME/clawd"
 fi
 
 # Wire Scoob to the host ooba OpenAI-compatible API by default
@@ -18,8 +23,9 @@ if [[ -n "${OPENAI_BASE_URL:-}" ]]; then
   if [[ "$BASE" != */v1 ]]; then BASE="$BASE/v1"; fi
 
   echo "[doghouse] Configuring OpenAI baseUrl -> $BASE"
-  /usr/local/bin/moltbot config set models.providers.openai.baseUrl "$BASE" || true
-  /usr/local/bin/moltbot config set models.providers.openai.apiKey "ooba" || true
+    gosu node /usr/local/bin/moltbot config set models.providers.openai.baseUrl "$BASE" || true
+  gosu node /usr/local/bin/moltbot config set models.providers.openai.apiKey "ooba" || true
 fi
 
-exec "$@"
+# Finally run the gateway as node
+exec gosu node "$@"

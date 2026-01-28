@@ -16,6 +16,10 @@ services:
       # Point Scoob's OpenAI-compatible client to the host ooba server
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-http://host.docker.internal:5000}
 
+      # Force state/config dirs so Moltbot doesn't try to migrate ~/.clawdbot -> ~/.moltbot
+      CLAWDBOT_STATE_DIR: /home/node/.moltbot
+      CLAWDBOT_CONFIG_PATH: /home/node/.moltbot/moltbot.json
+
       # Help TUIs behave
       TERM: xterm-256color
 
@@ -27,7 +31,7 @@ services:
 
     # Persist ONLY Scoob's own state
     volumes:
-      - doghouse_state:/home/node/.clawdbot
+      - doghouse_state:/home/node/.moltbot
 
     # Lockdown (prevents easy host escape)
     read_only: true
