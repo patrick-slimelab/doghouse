@@ -5,6 +5,7 @@ Expected files (examples):
 - `matrix_homeserver` (e.g. `https://matrix.example.org`)
 - `matrix_user_id` (e.g. `@scoob:example.org`)
 - `matrix_password` (Matrix account password)
+- `gateway_token` (Moltbot Gateway auth token; generate a long random string)
 
 Create with:
 ```bash

@@ -32,6 +32,11 @@ if pw="$(read_secret /run/secrets/matrix_password)"; then
   echo "[doghouse] Loaded MATRIX_PASSWORD from docker secret"
 fi
 
+if gt="$(read_secret /run/secrets/gateway_token)"; then
+  export CLAWDBOT_GATEWAY_TOKEN="$gt"
+  echo "[doghouse] Loaded CLAWDBOT_GATEWAY_TOKEN from docker secret"
+fi
+
 WORKSPACE_DIR="${DOGHOUSE_WORKSPACE:-$HOME/clawd}"
 
 # Ensure state + workspace dirs exist + are writable by scoob
