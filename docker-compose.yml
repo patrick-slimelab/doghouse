@@ -1,4 +1,20 @@
 services:
+  doghouse-init:
+    image: alpine:3.19
+    container_name: doghouse-init
+    restart: "no"
+    command:
+      - sh
+      - -lc
+      - |
+        set -e
+        # Fix permissions on persisted volumes for uid/gid 1001 (scoob)
+        mkdir -p /home/scoob/.moltbot /home/scoob
+        chown -R 1001:1001 /home/scoob/.moltbot /home/scoob || true
+    volumes:
+      - doghouse_state:/home/scoob/.moltbot
+      - doghouse_workspace:/home/scoob
+
   doghouse:
     build:
       context: .
@@ -6,6 +22,9 @@ services:
         MOLTBOT_REPO: https://github.com/patrick-slimelab/moltbot.git
         MOLTBOT_REF: ${MOLTBOT_REF:-main}
     container_name: doghouse
+    depends_on:
+      doghouse-init:
+        condition: service_completed_successfully
     restart: unless-stopped
 
     # Allow container to reach host services without --network=host
