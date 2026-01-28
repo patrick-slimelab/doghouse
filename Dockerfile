@@ -40,5 +40,8 @@ ENV HOME=/home/node
 
 USER node
 
-ENTRYPOINT ["/usr/bin/tini","--"]
+COPY --chown=node:node entrypoint.sh /home/node/entrypoint.sh
+RUN chmod +x /home/node/entrypoint.sh
+
+ENTRYPOINT ["/usr/bin/tini","--","/home/node/entrypoint.sh"]
 CMD ["node","./moltbot.mjs","gateway","start","--foreground"]

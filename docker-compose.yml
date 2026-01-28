@@ -27,7 +27,7 @@ services:
 
     # Persist ONLY Scoob's own state
     volumes:
-      - doghouse_state:/home/node/.moltbot
+      - doghouse_state:/home/node/.clawdbot
 
     # Lockdown (prevents easy host escape)
     read_only: true
