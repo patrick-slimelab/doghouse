@@ -36,7 +36,10 @@ WORKSPACE_DIR="${DOGHOUSE_WORKSPACE:-$HOME/clawd}"
 
 # Ensure state + workspace dirs exist + are writable by scoob
 mkdir -p "$STATE_DIR" "$WORKSPACE_DIR"
-chown -R scoob:scoob "$STATE_DIR" "$WORKSPACE_DIR" || true
+
+# If the volume contains old root-owned/other-uid files, try to fix ownership.
+# Some Docker setups can emit noisy EPERM/EACCES for unreadable entries; that's OK.
+chown -R scoob:scoob "$STATE_DIR" "$WORKSPACE_DIR" 2>/dev/null || true
 
 # One-time non-interactive bootstrap (no TUI)
 if [[ ! -f "$CFG_PATH" ]]; then
