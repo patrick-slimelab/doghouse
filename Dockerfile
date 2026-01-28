@@ -46,4 +46,4 @@ RUN chmod +x /usr/local/bin/doghouse-entrypoint
 
 # Run entrypoint as root so it can fix volume ownership, then drop to node.
 ENTRYPOINT ["/usr/bin/tini","--","/usr/local/bin/doghouse-entrypoint"]
-CMD ["node","/home/node/moltbot/moltbot.mjs","gateway","start","--foreground"]
+CMD ["node","/home/node/moltbot/moltbot.mjs","gateway","run","--bind","loopback"]

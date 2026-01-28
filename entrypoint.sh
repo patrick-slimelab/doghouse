@@ -32,9 +32,9 @@ if pw="$(read_secret /run/secrets/matrix_password)"; then
   echo "[doghouse] Loaded MATRIX_PASSWORD from docker secret"
 fi
 
-# Ensure state dir exists + is writable by node
-mkdir -p "$STATE_DIR"
-chown -R node:node "$STATE_DIR" || true
+# Ensure state + workspace dirs exist + are writable by node
+mkdir -p "$STATE_DIR" "$HOME/clawd"
+chown -R node:node "$STATE_DIR" "$HOME/clawd" || true
 
 # One-time non-interactive bootstrap (no TUI)
 if [[ ! -f "$CFG_PATH" ]]; then
@@ -50,9 +50,9 @@ if [[ -n "${OPENAI_BASE_URL:-}" ]]; then
   # Ensure /v1 suffix
   if [[ "$BASE" != */v1 ]]; then BASE="$BASE/v1"; fi
 
-  echo "[doghouse] Configuring OpenAI baseUrl -> $BASE"
-    gosu node /usr/local/bin/moltbot config set models.providers.openai.baseUrl "$BASE" || true
-  gosu node /usr/local/bin/moltbot config set models.providers.openai.apiKey "ooba" || true
+  echo "[doghouse] Configuring OpenAI provider -> $BASE"
+  # Set the whole provider object in one go so schema validation passes.
+  gosu node /usr/local/bin/moltbot config set models.providers.openai "{api: 'openai-completions', baseUrl: '$BASE', apiKey: 'ooba', models: []}" || true
 fi
 
 # Finally run the gateway as node

@@ -29,9 +29,10 @@ services:
     stdin_open: true
     tty: true
 
-    # Persist ONLY Scoob's own state
+    # Persist Scoob's state + workspace
     volumes:
       - doghouse_state:/home/node/.moltbot
+      - doghouse_workspace:/home/node/clawd
 
     secrets:
       - discord_bot_token
@@ -70,3 +71,4 @@ secrets:
 
 volumes:
   doghouse_state:
+  doghouse_workspace:
