@@ -1,0 +1,42 @@
+services:
+  doghouse:
+    build:
+      context: .
+      args:
+        MOLTBOT_REPO: https://github.com/patrick-slimelab/moltbot.git
+        MOLTBOT_REF: ${MOLTBOT_REF:-main}
+    container_name: doghouse
+    restart: unless-stopped
+
+    # Allow container to reach host services without --network=host
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    environment:
+      # Point Scoob's OpenAI-compatible client to the host ooba server
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-http://host.docker.internal:5000}
+
+      # Keep Node quieter
+      NODE_ENV: production
+
+    # Persist ONLY Scoob's own state
+    volumes:
+      - doghouse_state:/home/app/.moltbot
+
+    # Lockdown (prevents easy host escape)
+    read_only: true
+    tmpfs:
+      - /tmp
+
+    security_opt:
+      - no-new-privileges:true
+
+    cap_drop:
+      - ALL
+
+    # If Scoob needs to bind ports, add explicit mappings here.
+    # ports:
+    #   - "${DOGHOUSE_PORT:-7861}:7860"
+
+volumes:
+  doghouse_state:
