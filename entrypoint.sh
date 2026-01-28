@@ -22,9 +22,14 @@ if hs="$(read_secret /run/secrets/matrix_homeserver)"; then
   echo "[doghouse] Loaded MATRIX_HOMESERVER from docker secret"
 fi
 
-if at="$(read_secret /run/secrets/matrix_access_token)"; then
-  export MATRIX_ACCESS_TOKEN="$at"
-  echo "[doghouse] Loaded MATRIX_ACCESS_TOKEN from docker secret"
+if uid="$(read_secret /run/secrets/matrix_user_id)"; then
+  export MATRIX_USER_ID="$uid"
+  echo "[doghouse] Loaded MATRIX_USER_ID from docker secret"
+fi
+
+if pw="$(read_secret /run/secrets/matrix_password)"; then
+  export MATRIX_PASSWORD="$pw"
+  echo "[doghouse] Loaded MATRIX_PASSWORD from docker secret"
 fi
 
 # Ensure state dir exists + is writable by node

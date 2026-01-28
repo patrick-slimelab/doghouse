@@ -36,7 +36,8 @@ services:
     secrets:
       - discord_bot_token
       - matrix_homeserver
-      - matrix_access_token
+      - matrix_user_id
+      - matrix_password
 
     # Lockdown (prevents easy host escape)
     read_only: true
@@ -58,8 +59,10 @@ secrets:
     file: ./secrets/discord_bot_token
   matrix_homeserver:
     file: ./secrets/matrix_homeserver
-  matrix_access_token:
-    file: ./secrets/matrix_access_token
+  matrix_user_id:
+    file: ./secrets/matrix_user_id
+  matrix_password:
+    file: ./secrets/matrix_password
 
 volumes:
   doghouse_state:

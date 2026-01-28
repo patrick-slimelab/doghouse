@@ -3,7 +3,8 @@ Put secret files here (NOT committed).
 Expected files (examples):
 - `discord_bot_token` (Discord bot token)
 - `matrix_homeserver` (e.g. `https://matrix.example.org`)
-- `matrix_access_token` (Matrix access token)
+- `matrix_user_id` (e.g. `@scoob:example.org`)
+- `matrix_password` (Matrix account password)
 
 Create with:
 ```bash
