@@ -1,41 +1,43 @@
-FROM node:22-bookworm
+# syntax=docker/dockerfile:1
+
+# Build Moltbot in a dedicated stage
+FROM node:22-bookworm AS builder
 
 ARG MOLTBOT_REPO
 ARG MOLTBOT_REF
 
-# Minimal deps for building + git operations
 RUN apt-get update \
- && apt-get install -y --no-install-recommends git ca-certificates openssh-client tini gosu \
+ && apt-get install -y --no-install-recommends git ca-certificates openssh-client \
  && rm -rf /var/lib/apt/lists/*
 
-# We'll build as root (needs permission to enable corepack / install deps).
-USER root
-WORKDIR /home/node
-
-# Clone Moltbot and checkout the requested ref
+WORKDIR /opt
 RUN git clone ${MOLTBOT_REPO} moltbot \
  && cd moltbot \
  && git checkout ${MOLTBOT_REF}
 
-WORKDIR /home/node/moltbot
-
-# Install + build
+WORKDIR /opt/moltbot
 RUN corepack enable \
  && pnpm install --frozen-lockfile \
  && pnpm build \
  && node ./moltbot.mjs plugins install @moltbot/matrix || true
 
-# Ensure runtime user owns the app dir (avoid slow recursive chown if possible)
-# NOTE: this is still somewhat expensive because node_modules is large.
-RUN chown -R node:node /home/node/moltbot
+
+# Runtime image
+FROM node:22-bookworm
+
+# Minimal deps for runtime + entrypoint privilege drop
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends ca-certificates tini gosu \
+ && rm -rf /var/lib/apt/lists/*
+
+# Copy built repo (including node_modules) with correct ownership in one shot.
+# This avoids a slow recursive chown during build.
+WORKDIR /home/node
+COPY --from=builder --chown=node:node /opt/moltbot /home/node/moltbot
 
 # Expose CLI on PATH (so `moltbot` / `clawdbot` work inside the container)
 RUN ln -sf /home/node/moltbot/moltbot.mjs /usr/local/bin/moltbot \
  && ln -sf /home/node/moltbot/moltbot.mjs /usr/local/bin/clawdbot
-
-# Run
-# NOTE: we run the gateway in the foreground so docker can manage restarts.
-# Scoob will need to run onboarding once; state persists in the docker volume.
 
 ENV HOME=/home/node
 
@@ -44,4 +46,4 @@ RUN chmod +x /usr/local/bin/doghouse-entrypoint
 
 # Run entrypoint as root so it can fix volume ownership, then drop to node.
 ENTRYPOINT ["/usr/bin/tini","--","/usr/local/bin/doghouse-entrypoint"]
-CMD ["node","./moltbot.mjs","gateway","start","--foreground"]
+CMD ["node","/home/node/moltbot/moltbot.mjs","gateway","start","--foreground"]
