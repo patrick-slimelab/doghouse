@@ -52,8 +52,8 @@ if [[ -f /run/secrets/authorized_keys ]]; then
   # /run is tmpfs, so we can write here even if home is locked
   mkdir -p /run/ssh
   cat /run/secrets/authorized_keys > /run/ssh/scoob
-  chown scoob:scoob /run/ssh/scoob
   chmod 600 /run/ssh/scoob
+  chown scoob:scoob /run/ssh/scoob
   
   # Start sshd in background (as root, before dropping privs)
   echo "[doghouse] Starting sshd on port 2222..."
