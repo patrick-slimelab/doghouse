@@ -49,6 +49,10 @@ services:
 
     cap_drop:
       - ALL
+    cap_add:
+      - CHOWN
+      - SETUID
+      - SETGID
 
     # If Scoob needs to bind ports, add explicit mappings here.
     # ports:
