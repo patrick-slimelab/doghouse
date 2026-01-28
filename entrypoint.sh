@@ -56,6 +56,13 @@ fi
 echo "[doghouse] Enforcing agents.defaults.workspace=$WORKSPACE_DIR"
 gosu scoob /usr/local/bin/moltbot config set agents.defaults.workspace "$WORKSPACE_DIR" || true
 
+# Open DMs (disable pairing) for Scoob on Discord
+# This makes the bot reachable to anyone via DM.
+echo "[doghouse] Configuring Discord DMs: open"
+gosu scoob /usr/local/bin/moltbot config set channels.discord.enabled true || true
+gosu scoob /usr/local/bin/moltbot config set channels.discord.dm.policy "open" || true
+gosu scoob /usr/local/bin/moltbot config set channels.discord.dm.allowFrom "['*']" || true
+
 # Ensure gateway is allowed to run (required even after setup if mode is still unset)
 MODE="$(gosu scoob /usr/local/bin/moltbot config get gateway.mode 2>/dev/null || true)"
 if [[ -z "${MODE// }" || "$MODE" == "null" ]]; then
