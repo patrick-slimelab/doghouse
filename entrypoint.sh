@@ -44,8 +44,9 @@ chown -R scoob:scoob "$STATE_DIR" "$WORKSPACE_DIR" 2>/dev/null || true
 # One-time non-interactive bootstrap (no TUI)
 if [[ ! -f "$CFG_PATH" ]]; then
   echo "[doghouse] First run: moltbot setup"
-  # Run setup as scoob so it writes files with the correct ownership.
   gosu scoob /usr/local/bin/moltbot setup --workspace "$WORKSPACE_DIR"
+  # Required so `moltbot gateway run` won't refuse to start.
+  gosu scoob /usr/local/bin/moltbot config set gateway.mode local || true
 fi
 
 # Wire Scoob to the host ooba OpenAI-compatible API by default
