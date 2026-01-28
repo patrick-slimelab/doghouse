@@ -52,6 +52,10 @@ if [[ ! -f "$CFG_PATH" ]]; then
   gosu scoob /usr/local/bin/moltbot setup --workspace "$WORKSPACE_DIR"
 fi
 
+# Enforce workspace every boot (fixes legacy configs pointing to /home/node/clawd)
+echo "[doghouse] Enforcing agents.defaults.workspace=$WORKSPACE_DIR"
+gosu scoob /usr/local/bin/moltbot config set agents.defaults.workspace "$WORKSPACE_DIR" || true
+
 # Ensure gateway is allowed to run (required even after setup if mode is still unset)
 MODE="$(gosu scoob /usr/local/bin/moltbot config get gateway.mode 2>/dev/null || true)"
 if [[ -z "${MODE// }" || "$MODE" == "null" ]]; then
