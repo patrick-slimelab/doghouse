@@ -32,15 +32,17 @@ if pw="$(read_secret /run/secrets/matrix_password)"; then
   echo "[doghouse] Loaded MATRIX_PASSWORD from docker secret"
 fi
 
+WORKSPACE_DIR="${DOGHOUSE_WORKSPACE:-$HOME/clawd}"
+
 # Ensure state + workspace dirs exist + are writable by node
-mkdir -p "$STATE_DIR" "$HOME/clawd"
-chown -R node:node "$STATE_DIR" "$HOME/clawd" || true
+mkdir -p "$STATE_DIR" "$WORKSPACE_DIR"
+chown -R node:node "$STATE_DIR" "$WORKSPACE_DIR" || true
 
 # One-time non-interactive bootstrap (no TUI)
 if [[ ! -f "$CFG_PATH" ]]; then
   echo "[doghouse] First run: moltbot setup"
   # Run setup as node so it writes files with the correct ownership.
-  gosu node /usr/local/bin/moltbot setup --workspace "$HOME/clawd"
+  gosu node /usr/local/bin/moltbot setup --workspace "$WORKSPACE_DIR"
 fi
 
 # Wire Scoob to the host ooba OpenAI-compatible API by default
