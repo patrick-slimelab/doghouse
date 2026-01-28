@@ -8,9 +8,9 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends git ca-certificates openssh-client tini \
  && rm -rf /var/lib/apt/lists/*
 
-# Non-root user
-# The official node image already has a non-root user `node` (uid 1000).
-USER node
+# We'll build as root (needs permission to enable corepack / install deps),
+# then drop to the built-in non-root user `node` (uid 1000) at runtime.
+USER root
 WORKDIR /home/node
 
 # Clone Moltbot and checkout the requested ref
@@ -25,10 +25,16 @@ RUN corepack enable \
  && pnpm install --frozen-lockfile \
  && pnpm build
 
+# Ensure runtime user owns the app dir
+RUN chown -R node:node /home/node/moltbot
+
 # Run
 # NOTE: we run the gateway in the foreground so docker can manage restarts.
 # Scoob will need to run `moltbot onboard` in the container volume on first boot.
 
 ENV HOME=/home/node
+
+USER node
+
 ENTRYPOINT ["/usr/bin/tini","--"]
 CMD ["node","./moltbot.mjs","gateway","start","--foreground"]
