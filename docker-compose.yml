@@ -33,6 +33,11 @@ services:
     volumes:
       - doghouse_state:/home/node/.moltbot
 
+    secrets:
+      - discord_bot_token
+      - matrix_homeserver
+      - matrix_access_token
+
     # Lockdown (prevents easy host escape)
     read_only: true
     tmpfs:
@@ -47,6 +52,14 @@ services:
     # If Scoob needs to bind ports, add explicit mappings here.
     # ports:
     #   - "${DOGHOUSE_PORT:-7861}:7860"
+
+secrets:
+  discord_bot_token:
+    file: ./secrets/discord_bot_token
+  matrix_homeserver:
+    file: ./secrets/matrix_homeserver
+  matrix_access_token:
+    file: ./secrets/matrix_access_token
 
 volumes:
   doghouse_state:

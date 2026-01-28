@@ -22,7 +22,8 @@ WORKDIR /home/node/moltbot
 # Install + build
 RUN corepack enable \
  && pnpm install --frozen-lockfile \
- && pnpm build
+ && pnpm build \
+ && node ./moltbot.mjs plugins install @moltbot/matrix || true
 
 # Ensure runtime user owns the app dir (avoid slow recursive chown if possible)
 # NOTE: this is still somewhat expensive because node_modules is large.

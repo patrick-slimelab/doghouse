@@ -4,6 +4,29 @@ set -euo pipefail
 STATE_DIR="${CLAWDBOT_STATE_DIR:-$HOME/.moltbot}"
 CFG_PATH="${CLAWDBOT_CONFIG_PATH:-$STATE_DIR/moltbot.json}"
 
+read_secret() {
+  local path="$1"
+  [[ -f "$path" ]] || return 1
+  # Trim trailing newlines
+  tr -d '\r\n' < "$path"
+}
+
+# Load channel secrets (docker secrets are mounted at /run/secrets/*)
+if token="$(read_secret /run/secrets/discord_bot_token)"; then
+  export DISCORD_BOT_TOKEN="$token"
+  echo "[doghouse] Loaded DISCORD_BOT_TOKEN from docker secret"
+fi
+
+if hs="$(read_secret /run/secrets/matrix_homeserver)"; then
+  export MATRIX_HOMESERVER="$hs"
+  echo "[doghouse] Loaded MATRIX_HOMESERVER from docker secret"
+fi
+
+if at="$(read_secret /run/secrets/matrix_access_token)"; then
+  export MATRIX_ACCESS_TOKEN="$at"
+  echo "[doghouse] Loaded MATRIX_ACCESS_TOKEN from docker secret"
+fi
+
 # Ensure state dir exists + is writable by node
 mkdir -p "$STATE_DIR"
 chown -R node:node "$STATE_DIR" || true

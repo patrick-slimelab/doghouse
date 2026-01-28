@@ -1,0 +1,14 @@
+Put secret files here (NOT committed).
+
+Expected files (examples):
+- `discord_bot_token` (Discord bot token)
+- `matrix_homeserver` (e.g. `https://matrix.example.org`)
+- `matrix_access_token` (Matrix access token)
+
+Create with:
+```bash
+mkdir -p secrets
+chmod 700 secrets
+printf "%s" "<token>" > secrets/discord_bot_token
+chmod 600 secrets/discord_bot_token
+```
