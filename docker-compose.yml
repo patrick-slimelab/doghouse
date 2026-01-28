@@ -17,8 +17,8 @@ services:
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-http://host.docker.internal:5000}
 
       # Force state/config dirs so Moltbot doesn't try to migrate ~/.clawdbot -> ~/.moltbot
-      CLAWDBOT_STATE_DIR: /home/node/.moltbot
-      CLAWDBOT_CONFIG_PATH: /home/node/.moltbot/moltbot.json
+      CLAWDBOT_STATE_DIR: /home/scoob/.moltbot
+      CLAWDBOT_CONFIG_PATH: /home/scoob/.moltbot/moltbot.json
       DOGHOUSE_WORKSPACE: /home/scoob
 
       # Help TUIs behave
@@ -32,7 +32,7 @@ services:
 
     # Persist Scoob's state + workspace
     volumes:
-      - doghouse_state:/home/node/.moltbot
+      - doghouse_state:/home/scoob/.moltbot
       - doghouse_workspace:/home/scoob
 
     secrets:

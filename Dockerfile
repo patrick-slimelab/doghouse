@@ -25,25 +25,31 @@ RUN corepack enable \
 # Runtime image
 FROM node:22-bookworm
 
-# Minimal deps for runtime + entrypoint privilege drop
+# Minimal deps for runtime + entrypoint privilege drop + sudo
 RUN apt-get update \
- && apt-get install -y --no-install-recommends ca-certificates tini gosu \
+ && apt-get install -y --no-install-recommends ca-certificates tini gosu sudo \
  && rm -rf /var/lib/apt/lists/*
+
+# Create scoob user (passwordless sudo *inside the container*)
+RUN useradd -m -u 1001 -s /bin/bash scoob \
+ && usermod -aG sudo scoob \
+ && echo 'scoob ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/scoob \
+ && chmod 0440 /etc/sudoers.d/scoob
 
 # Copy built repo (including node_modules) with correct ownership in one shot.
 # This avoids a slow recursive chown during build.
-WORKDIR /home/node
-COPY --from=builder --chown=node:node /opt/moltbot /home/node/moltbot
+WORKDIR /home/scoob
+COPY --from=builder --chown=scoob:scoob /opt/moltbot /home/scoob/moltbot
 
 # Expose CLI on PATH (so `moltbot` / `clawdbot` work inside the container)
-RUN ln -sf /home/node/moltbot/moltbot.mjs /usr/local/bin/moltbot \
- && ln -sf /home/node/moltbot/moltbot.mjs /usr/local/bin/clawdbot
+RUN ln -sf /home/scoob/moltbot/moltbot.mjs /usr/local/bin/moltbot \
+ && ln -sf /home/scoob/moltbot/moltbot.mjs /usr/local/bin/clawdbot
 
-ENV HOME=/home/node
+ENV HOME=/home/scoob
 
 COPY entrypoint.sh /usr/local/bin/doghouse-entrypoint
 RUN chmod +x /usr/local/bin/doghouse-entrypoint
 
 # Run entrypoint as root so it can fix volume ownership, then drop to node.
 ENTRYPOINT ["/usr/bin/tini","--","/usr/local/bin/doghouse-entrypoint"]
-CMD ["node","/home/node/moltbot/moltbot.mjs","gateway","run","--bind","loopback"]
+CMD ["node","/home/scoob/moltbot/moltbot.mjs","gateway","run","--bind","loopback"]

@@ -34,15 +34,15 @@ fi
 
 WORKSPACE_DIR="${DOGHOUSE_WORKSPACE:-$HOME/clawd}"
 
-# Ensure state + workspace dirs exist + are writable by node
+# Ensure state + workspace dirs exist + are writable by scoob
 mkdir -p "$STATE_DIR" "$WORKSPACE_DIR"
-chown -R node:node "$STATE_DIR" "$WORKSPACE_DIR" || true
+chown -R scoob:scoob "$STATE_DIR" "$WORKSPACE_DIR" || true
 
 # One-time non-interactive bootstrap (no TUI)
 if [[ ! -f "$CFG_PATH" ]]; then
   echo "[doghouse] First run: moltbot setup"
-  # Run setup as node so it writes files with the correct ownership.
-  gosu node /usr/local/bin/moltbot setup --workspace "$WORKSPACE_DIR"
+  # Run setup as scoob so it writes files with the correct ownership.
+  gosu scoob /usr/local/bin/moltbot setup --workspace "$WORKSPACE_DIR"
 fi
 
 # Wire Scoob to the host ooba OpenAI-compatible API by default
@@ -54,8 +54,8 @@ if [[ -n "${OPENAI_BASE_URL:-}" ]]; then
 
   echo "[doghouse] Configuring OpenAI provider -> $BASE"
   # Set the whole provider object in one go so schema validation passes.
-  gosu node /usr/local/bin/moltbot config set models.providers.openai "{api: 'openai-completions', baseUrl: '$BASE', apiKey: 'ooba', models: []}" || true
+  gosu scoob /usr/local/bin/moltbot config set models.providers.openai "{api: 'openai-completions', baseUrl: '$BASE', apiKey: 'ooba', models: []}" || true
 fi
 
-# Finally run the gateway as node
-exec gosu node "$@"
+# Finally run the gateway as scoob
+exec gosu scoob "$@"
