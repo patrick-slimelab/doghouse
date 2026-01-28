@@ -25,9 +25,9 @@ RUN corepack enable \
 # Runtime image
 FROM node:22-bookworm
 
-# Minimal deps for runtime + entrypoint privilege drop + sudo + curl/jq (for model probing)
+# Minimal deps for runtime + entrypoint privilege drop + sudo + curl/jq (for model probing) + sshd
 RUN apt-get update \
- && apt-get install -y --no-install-recommends ca-certificates tini gosu sudo curl jq \
+ && apt-get install -y --no-install-recommends ca-certificates tini gosu sudo curl jq openssh-server \
  && rm -rf /var/lib/apt/lists/*
 
 # Create scoob user (passwordless sudo *inside the container*)
@@ -35,6 +35,14 @@ RUN useradd -m -u 1001 -s /bin/bash scoob \
  && usermod -aG sudo scoob \
  && echo 'scoob ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/scoob \
  && chmod 0440 /etc/sudoers.d/scoob
+
+# Configure SSHD (listen on 2222, allow scoob, custom authorized_keys path)
+RUN mkdir /var/run/sshd \
+ && echo 'Port 2222' >> /etc/ssh/sshd_config \
+ && echo 'PermitRootLogin no' >> /etc/ssh/sshd_config \
+ && echo 'PasswordAuthentication no' >> /etc/ssh/sshd_config \
+ && echo 'AllowUsers scoob' >> /etc/ssh/sshd_config \
+ && echo 'AuthorizedKeysFile /run/ssh/%u' >> /etc/ssh/sshd_config
 
 # Copy built repo (including node_modules) with correct ownership in one shot.
 # This avoids a slow recursive chown during build.
