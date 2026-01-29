@@ -49,6 +49,7 @@ chown -R scoob:scoob "$STATE_DIR" "$WORKSPACE_DIR" 2>/dev/null || true
 # Configure SSH if authorized_keys secret is present
 if [[ -f /run/secrets/authorized_keys ]]; then
   echo "[doghouse] Setting up SSH authorized_keys in /tmp/ssh..."
+  rm -rf /tmp/ssh
   mkdir -p /tmp/ssh
   cat /run/secrets/authorized_keys > /tmp/ssh/scoob
   chmod 600 /tmp/ssh/scoob
