@@ -48,12 +48,11 @@ chown -R scoob:scoob "$STATE_DIR" "$WORKSPACE_DIR" 2>/dev/null || true
 
 # Configure SSH if authorized_keys secret is present
 if [[ -f /run/secrets/authorized_keys ]]; then
-  echo "[doghouse] Setting up SSH authorized_keys in /run/ssh..."
-  # /run is tmpfs, so we can write here even if home is locked
-  mkdir -p /run/ssh
-  cat /run/secrets/authorized_keys > /run/ssh/scoob
-  chmod 600 /run/ssh/scoob
-  chown scoob:scoob /run/ssh/scoob
+  echo "[doghouse] Setting up SSH authorized_keys in /tmp/ssh..."
+  mkdir -p /tmp/ssh
+  cat /run/secrets/authorized_keys > /tmp/ssh/scoob
+  chmod 600 /tmp/ssh/scoob
+  chown scoob:scoob /tmp/ssh/scoob
   
   # Start sshd in background (as root, before dropping privs)
   echo "[doghouse] Starting sshd on port 2222..."

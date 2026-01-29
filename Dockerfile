@@ -42,7 +42,7 @@ RUN mkdir /var/run/sshd \
  && echo 'PermitRootLogin no' >> /etc/ssh/sshd_config \
  && echo 'PasswordAuthentication no' >> /etc/ssh/sshd_config \
  && echo 'AllowUsers scoob' >> /etc/ssh/sshd_config \
- && echo 'AuthorizedKeysFile /run/ssh/%u' >> /etc/ssh/sshd_config
+ && echo 'AuthorizedKeysFile /tmp/ssh/%u' >> /etc/ssh/sshd_config
 
 # Copy built repo (including node_modules) with correct ownership in one shot.
 # This avoids a slow recursive chown during build.
