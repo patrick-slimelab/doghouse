@@ -62,11 +62,11 @@ services:
       - gateway_token
       - authorized_keys
 
-    # Lockdown (prevents easy host escape)
-    read_only: true
-    tmpfs:
-      - /tmp
-      - /run
+    # Lockdown (disabled for stability)
+    read_only: false
+    # tmpfs:
+    #   - /tmp
+    #   - /run
 
     security_opt:
       - no-new-privileges:true
