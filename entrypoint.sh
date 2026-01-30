@@ -121,20 +121,23 @@ gosu scoob /usr/local/bin/moltbot config set channels.discord.dm.allowFrom "['*'
 gosu scoob /usr/local/bin/moltbot config set channels.discord.groupPolicy "open" || true
 
 # Configure trigger patterns so Scoob responds to "scoob", "scoobert", "SCOOOOOB", etc.
-# requireMention=true means he won't respond to EVERYTHING, just mentions + patterns
+# requireMention=true means he will respond to SYSTEM.md regex patterns
 echo "[doghouse] Configuring Discord guilds: mention required (with patterns)"
-gosu scoob /usr/local/bin/moltbot config set 'channels.discord.guilds.*.requireMention' true || true
+gosu scoob /usr/local/bin/moltbot config set 'channels.discord.guilds.*.requireMention' false || true
 
 # Set mention patterns: regex "scoo+b" matches scoob, scooob, scooooob, scoobert, etc.
 echo "[doghouse] Configuring mention patterns: scoo+b, scooby, scoob"
 gosu scoob /usr/local/bin/moltbot config set messages.groupChat.mentionPatterns '["scoo+b", "scooby", "scoob"]' || true
 
 echo "[doghouse] Configuring Matrix channels: open"
- gosu scoob /usr/local/bin/moltbot config set 'channels.matrix.groups.*.requireMention' false || true
 gosu scoob /usr/local/bin/moltbot config set channels.matrix.enabled true || true
 gosu scoob /usr/local/bin/moltbot config set channels.matrix.dm.policy "open" || true
 gosu scoob /usr/local/bin/moltbot config set channels.matrix.dm.allowFrom "['*']" || true
 gosu scoob /usr/local/bin/moltbot config set channels.matrix.groupPolicy "open" || true
+
+# Matrix groups: require mention (uses agent-level mentionPatterns regex)
+echo "[doghouse] Configuring Matrix groups: mention required (with patterns)"
+gosu scoob /usr/local/bin/moltbot config set 'channels.matrix.groups.*.requireMention' true || true
 
 # Ensure gateway is allowed to run (required even after setup if mode is still unset)
 MODE="$(gosu scoob /usr/local/bin/moltbot config get gateway.mode 2>/dev/null || true)"
