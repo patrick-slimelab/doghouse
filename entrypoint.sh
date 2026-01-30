@@ -37,19 +37,9 @@ if gt="$(read_secret /run/secrets/gateway_token)"; then
   echo "[doghouse] Loaded CLAWDBOT_GATEWAY_TOKEN from docker secret"
 fi
 
-WORKSPACE_DIR="${DOGHOUSE_WORKSPACE:-$HOME/clawd}"
-
-# Ensure state + workspace dirs exist + are writable by scoob
-mkdir -p "$STATE_DIR" "$WORKSPACE_DIR"
-
-# If the volume contains old root-owned/other-uid files, try to fix ownership.
-# Some Docker setups can emit noisy EPERM/EACCES for unreadable entries; that's OK.
-chown -R scoob:scoob "$STATE_DIR" "$WORKSPACE_DIR" 2>/dev/null || true
-
 # Configure SSH if authorized_keys secret is present
 if [[ -f /run/secrets/authorized_keys ]]; then
   echo "[doghouse] Setting up SSH authorized_keys in /tmp/ssh..."
-  rm -rf /tmp/ssh
   mkdir -p /tmp/ssh
   cat /run/secrets/authorized_keys > /tmp/ssh/scoob
   chmod 600 /tmp/ssh/scoob
@@ -59,6 +49,24 @@ if [[ -f /run/secrets/authorized_keys ]]; then
   echo "[doghouse] Starting sshd on port 2222..."
   /usr/sbin/sshd -D -e &
 fi
+
+# Authenticate gh CLI if token is present
+if [[ -f /run/secrets/gh_token ]]; then
+  echo "[doghouse] Authenticating gh CLI..."
+  # We need to run this as scoob, but we are root here.
+  # We can't use gosu inside a pipe easily for this, so we'll do it later or trick it.
+  # Actually, gh stores config in HOME. So we just need to run it as scoob.
+  cat /run/secrets/gh_token | gosu scoob gh auth login --with-token || echo "[doghouse] gh auth failed"
+fi
+
+WORKSPACE_DIR="${DOGHOUSE_WORKSPACE:-$HOME/clawd}"
+
+# Ensure state + workspace dirs exist + are writable by scoob
+mkdir -p "$STATE_DIR" "$WORKSPACE_DIR"
+
+# If the volume contains old root-owned/other-uid files, try to fix ownership.
+# Some Docker setups can emit noisy EPERM/EACCES for unreadable entries; that's OK.
+chown -R scoob:scoob "$STATE_DIR" "$WORKSPACE_DIR" 2>/dev/null || true
 
 # One-time non-interactive bootstrap (no TUI)
 if [[ ! -f "$CFG_PATH" ]]; then
@@ -70,11 +78,6 @@ fi
 echo "[doghouse] Enforcing agents.defaults.workspace=$WORKSPACE_DIR"
 gosu scoob /usr/local/bin/moltbot config set agents.defaults.workspace "$WORKSPACE_DIR" || true
 
-# Enforce Full Auto (no ask, no security restrictions)
-echo "[doghouse] Enforcing Full Auto (tools.exec.ask=off, tools.exec.security=full)"
-gosu scoob /usr/local/bin/moltbot config set tools.exec.ask off || true
-gosu scoob /usr/local/bin/moltbot config set tools.exec.security full || true
-
 # Open DMs and Group channels for Scoob on Discord + Matrix
 # This makes the bot reachable to anyone via DM.
 echo "[doghouse] Configuring Discord channels: open"
@@ -82,6 +85,8 @@ gosu scoob /usr/local/bin/moltbot config set channels.discord.enabled true || tr
 gosu scoob /usr/local/bin/moltbot config set channels.discord.dm.policy "open" || true
 gosu scoob /usr/local/bin/moltbot config set channels.discord.dm.allowFrom "['*']" || true
 gosu scoob /usr/local/bin/moltbot config set channels.discord.groupPolicy "open" || true
+# Disable requireMention so he hears "scoob ..." without @
+gosu scoob /usr/local/bin/moltbot config set channels.discord.guilds.*.requireMention false || true
 
 echo "[doghouse] Configuring Matrix channels: open"
 gosu scoob /usr/local/bin/moltbot config set channels.matrix.enabled true || true
@@ -89,16 +94,16 @@ gosu scoob /usr/local/bin/moltbot config set channels.matrix.dm.policy "open" ||
 gosu scoob /usr/local/bin/moltbot config set channels.matrix.dm.allowFrom "['*']" || true
 gosu scoob /usr/local/bin/moltbot config set channels.matrix.groupPolicy "open" || true
 
-# Disable approval prompts for sudo (since scoob has passwordless sudo)
-echo "[doghouse] Configuring elevatedDefault: full"
-gosu scoob /usr/local/bin/moltbot config set agents.defaults.elevatedDefault "full" || true
-
 # Ensure gateway is allowed to run (required even after setup if mode is still unset)
 MODE="$(gosu scoob /usr/local/bin/moltbot config get gateway.mode 2>/dev/null || true)"
 if [[ -z "${MODE// }" || "$MODE" == "null" ]]; then
   echo "[doghouse] Setting gateway.mode=local"
   gosu scoob /usr/local/bin/moltbot config set gateway.mode local || true
 fi
+
+# Disable approval prompts for sudo (since scoob has passwordless sudo)
+echo "[doghouse] Configuring elevatedDefault: full"
+gosu scoob /usr/local/bin/moltbot config set agents.defaults.elevatedDefault "full" || true
 
 # Wire Scoob to the host ooba OpenAI-compatible API by default
 # (does NOT add any cloud keys; uses a dummy apiKey string)
