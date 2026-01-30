@@ -70,6 +70,11 @@ fi
 echo "[doghouse] Enforcing agents.defaults.workspace=$WORKSPACE_DIR"
 gosu scoob /usr/local/bin/moltbot config set agents.defaults.workspace "$WORKSPACE_DIR" || true
 
+# Enforce Full Auto (no ask, no security restrictions)
+echo "[doghouse] Enforcing Full Auto (tools.exec.ask=off, tools.exec.security=full)"
+gosu scoob /usr/local/bin/moltbot config set tools.exec.ask off || true
+gosu scoob /usr/local/bin/moltbot config set tools.exec.security full || true
+
 # Open DMs and Group channels for Scoob on Discord + Matrix
 # This makes the bot reachable to anyone via DM.
 echo "[doghouse] Configuring Discord channels: open"
@@ -83,6 +88,10 @@ gosu scoob /usr/local/bin/moltbot config set channels.matrix.enabled true || tru
 gosu scoob /usr/local/bin/moltbot config set channels.matrix.dm.policy "open" || true
 gosu scoob /usr/local/bin/moltbot config set channels.matrix.dm.allowFrom "['*']" || true
 gosu scoob /usr/local/bin/moltbot config set channels.matrix.groupPolicy "open" || true
+
+# Disable approval prompts for sudo (since scoob has passwordless sudo)
+echo "[doghouse] Configuring elevatedDefault: full"
+gosu scoob /usr/local/bin/moltbot config set agents.defaults.elevatedDefault "full" || true
 
 # Ensure gateway is allowed to run (required even after setup if mode is still unset)
 MODE="$(gosu scoob /usr/local/bin/moltbot config get gateway.mode 2>/dev/null || true)"
