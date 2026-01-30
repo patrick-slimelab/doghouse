@@ -22,3 +22,10 @@ A locked-down Docker Compose setup for running a "Scoob" Moltbot/Clawdbot instan
 ## Notes
 - This container intentionally does **not** mount `/var/run/docker.sock`.
 - This container adds `host.docker.internal` via the Docker "host-gateway" feature.
+
+## Permissions & Sudo
+The `scoob` user inside the container has passwordless sudo (`scoob ALL=(ALL) NOPASSWD:ALL`).
+
+To allow Moltbot to run `sudo` commands without asking for approval:
+- Set `agents.defaults.elevatedDefault = "full"` in config.
+- This is enforced by `entrypoint.sh` on boot.
