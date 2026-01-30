@@ -37,9 +37,19 @@ if gt="$(read_secret /run/secrets/gateway_token)"; then
   echo "[doghouse] Loaded CLAWDBOT_GATEWAY_TOKEN from docker secret"
 fi
 
+WORKSPACE_DIR="${DOGHOUSE_WORKSPACE:-$HOME/clawd}"
+
+# Ensure state + workspace dirs exist + are writable by scoob
+mkdir -p "$STATE_DIR" "$WORKSPACE_DIR"
+
+# If the volume contains old root-owned/other-uid files, try to fix ownership.
+# Some Docker setups can emit noisy EPERM/EACCES for unreadable entries; that's OK.
+chown -R scoob:scoob "$STATE_DIR" "$WORKSPACE_DIR" 2>/dev/null || true
+
 # Configure SSH if authorized_keys secret is present
 if [[ -f /run/secrets/authorized_keys ]]; then
   echo "[doghouse] Setting up SSH authorized_keys in /tmp/ssh..."
+  rm -rf /tmp/ssh
   mkdir -p /tmp/ssh
   cat /run/secrets/authorized_keys > /tmp/ssh/scoob
   chmod 600 /tmp/ssh/scoob
@@ -50,23 +60,29 @@ if [[ -f /run/secrets/authorized_keys ]]; then
   /usr/sbin/sshd -D -e &
 fi
 
-# Authenticate gh CLI if token is present
-if [[ -f /run/secrets/gh_token ]]; then
-  echo "[doghouse] Authenticating gh CLI..."
-  # We need to run this as scoob, but we are root here.
-  # We can't use gosu inside a pipe easily for this, so we'll do it later or trick it.
-  # Actually, gh stores config in HOME. So we just need to run it as scoob.
-  cat /run/secrets/gh_token | gosu scoob gh auth login --with-token || echo "[doghouse] gh auth failed"
+# COPY GITHUB KEY TO ~/.ssh IF PRESENT
+if [[ -f /run/secrets/id_ed25519 ]]; then
+  echo "[doghouse] Setting up GitHub SSH key in ~/.ssh..."
+  mkdir -p /home/scoob/.ssh
+  cat /run/secrets/id_ed25519 > /home/scoob/.ssh/id_ed25519
+  chmod 600 /home/scoob/.ssh/id_ed25519
+  chown scoob:scoob /home/scoob/.ssh/id_ed25519
+  
+  # Add github.com to known_hosts to avoid prompt
+  if ! grep -q github.com /home/scoob/.ssh/known_hosts 2>/dev/null; then
+    ssh-keyscan github.com >> /home/scoob/.ssh/known_hosts
+    chown scoob:scoob /home/scoob/.ssh/known_hosts
+  fi
 fi
 
-WORKSPACE_DIR="${DOGHOUSE_WORKSPACE:-$HOME/clawd}"
-
-# Ensure state + workspace dirs exist + are writable by scoob
-mkdir -p "$STATE_DIR" "$WORKSPACE_DIR"
-
-# If the volume contains old root-owned/other-uid files, try to fix ownership.
-# Some Docker setups can emit noisy EPERM/EACCES for unreadable entries; that's OK.
-chown -R scoob:scoob "$STATE_DIR" "$WORKSPACE_DIR" 2>/dev/null || true
+# AUTO-LOGIN GH CLI IF TOKEN PRESENT
+if [[ -f /run/secrets/gh_token ]]; then
+  echo "[doghouse] Authenticating gh CLI..."
+  # gh auth login reads from stdin if --with-token is passed
+  cat /run/secrets/gh_token | gosu scoob gh auth login --hostname github.com --git-protocol https --with-token || echo "[doghouse] gh auth failed"
+  # Also set as env var just in case
+  export GH_TOKEN="$(read_secret /run/secrets/gh_token)"
+fi
 
 # One-time non-interactive bootstrap (no TUI)
 if [[ ! -f "$CFG_PATH" ]]; then
@@ -78,6 +94,11 @@ fi
 echo "[doghouse] Enforcing agents.defaults.workspace=$WORKSPACE_DIR"
 gosu scoob /usr/local/bin/moltbot config set agents.defaults.workspace "$WORKSPACE_DIR" || true
 
+# Enforce Full Auto (no ask, no security restrictions)
+echo "[doghouse] Enforcing Full Auto (tools.exec.ask=off, tools.exec.security=full)"
+gosu scoob /usr/local/bin/moltbot config set tools.exec.ask off || true
+gosu scoob /usr/local/bin/moltbot config set tools.exec.security full || true
+
 # Open DMs and Group channels for Scoob on Discord + Matrix
 # This makes the bot reachable to anyone via DM.
 echo "[doghouse] Configuring Discord channels: open"
@@ -85,8 +106,15 @@ gosu scoob /usr/local/bin/moltbot config set channels.discord.enabled true || tr
 gosu scoob /usr/local/bin/moltbot config set channels.discord.dm.policy "open" || true
 gosu scoob /usr/local/bin/moltbot config set channels.discord.dm.allowFrom "['*']" || true
 gosu scoob /usr/local/bin/moltbot config set channels.discord.groupPolicy "open" || true
-# Disable requireMention so he hears "scoob ..." without @
-gosu scoob /usr/local/bin/moltbot config set channels.discord.guilds.*.requireMention false || true
+
+# Configure trigger patterns so Scoob responds to "scoob", "scoobert", "SCOOOOOB", etc.
+# requireMention=true means he won't respond to EVERYTHING, just mentions + patterns
+echo "[doghouse] Configuring Discord guilds: mention required (with patterns)"
+gosu scoob /usr/local/bin/moltbot config set 'channels.discord.guilds.*.requireMention' true || true
+
+# Set mention patterns: regex "scoo+b" matches scoob, scooob, scooooob, scoobert, etc.
+echo "[doghouse] Configuring mention patterns: scoo+b, scooby, scoob"
+gosu scoob /usr/local/bin/moltbot config set messages.groupChat.mentionPatterns '["scoo+b", "scooby", "scoob"]' || true
 
 echo "[doghouse] Configuring Matrix channels: open"
 gosu scoob /usr/local/bin/moltbot config set channels.matrix.enabled true || true
@@ -100,10 +128,6 @@ if [[ -z "${MODE// }" || "$MODE" == "null" ]]; then
   echo "[doghouse] Setting gateway.mode=local"
   gosu scoob /usr/local/bin/moltbot config set gateway.mode local || true
 fi
-
-# Disable approval prompts for sudo (since scoob has passwordless sudo)
-echo "[doghouse] Configuring elevatedDefault: full"
-gosu scoob /usr/local/bin/moltbot config set agents.defaults.elevatedDefault "full" || true
 
 # Wire Scoob to the host ooba OpenAI-compatible API by default
 # (does NOT add any cloud keys; uses a dummy apiKey string)
