@@ -84,6 +84,10 @@ if [[ -f /run/secrets/id_ed25519 ]]; then
   chown scoob:scoob /home/scoob/.ssh/known_hosts
 fi
 
+# Configure git to trust all directories (prevents "dubious ownership" errors)
+echo "[doghouse] Configuring git safe.directory"
+gosu scoob git config --global --add safe.directory '*'
+
 # AUTO-LOGIN GH CLI IF TOKEN PRESENT
 if [[ -f /run/secrets/gh_token ]]; then
   echo "[doghouse] Authenticating gh CLI..."
@@ -126,6 +130,7 @@ echo "[doghouse] Configuring mention patterns: scoo+b, scooby, scoob"
 gosu scoob /usr/local/bin/moltbot config set messages.groupChat.mentionPatterns '["scoo+b", "scooby", "scoob"]' || true
 
 echo "[doghouse] Configuring Matrix channels: open"
+ gosu scoob /usr/local/bin/moltbot config set 'channels.matrix.groups.*.requireMention' false || true
 gosu scoob /usr/local/bin/moltbot config set channels.matrix.enabled true || true
 gosu scoob /usr/local/bin/moltbot config set channels.matrix.dm.policy "open" || true
 gosu scoob /usr/local/bin/moltbot config set channels.matrix.dm.allowFrom "['*']" || true
