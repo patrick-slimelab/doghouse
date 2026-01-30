@@ -64,15 +64,24 @@ fi
 if [[ -f /run/secrets/id_ed25519 ]]; then
   echo "[doghouse] Setting up GitHub SSH key in ~/.ssh..."
   mkdir -p /home/scoob/.ssh
+  
+  # Remove any stale keys first
+  rm -f /home/scoob/.ssh/id_ed25519 /home/scoob/.ssh/id_ed25519.pub
+  
+  # Copy private key
   cat /run/secrets/id_ed25519 > /home/scoob/.ssh/id_ed25519
   chmod 600 /home/scoob/.ssh/id_ed25519
   chown scoob:scoob /home/scoob/.ssh/id_ed25519
   
+  # Regenerate public key from private key
+  ssh-keygen -y -f /home/scoob/.ssh/id_ed25519 > /home/scoob/.ssh/id_ed25519.pub
+  chmod 644 /home/scoob/.ssh/id_ed25519.pub
+  chown scoob:scoob /home/scoob/.ssh/id_ed25519.pub
+  echo "[doghouse] SSH public key: $(cat /home/scoob/.ssh/id_ed25519.pub)"
+  
   # Add github.com to known_hosts to avoid prompt
-  if ! grep -q github.com /home/scoob/.ssh/known_hosts 2>/dev/null; then
-    ssh-keyscan github.com >> /home/scoob/.ssh/known_hosts
-    chown scoob:scoob /home/scoob/.ssh/known_hosts
-  fi
+  ssh-keyscan github.com > /home/scoob/.ssh/known_hosts 2>/dev/null
+  chown scoob:scoob /home/scoob/.ssh/known_hosts
 fi
 
 # AUTO-LOGIN GH CLI IF TOKEN PRESENT
