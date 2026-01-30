@@ -69,7 +69,7 @@ services:
     #   - /run
 
     security_opt:
-      - no-new-privileges:true
+      - no-new-privileges:false
 
     cap_drop:
       - ALL
