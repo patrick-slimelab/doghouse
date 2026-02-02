@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-STATE_DIR="${CLAWDBOT_STATE_DIR:-$HOME/.moltbot}"
-CFG_PATH="${CLAWDBOT_CONFIG_PATH:-$STATE_DIR/moltbot.json}"
+STATE_DIR="${OPENCLAW_STATE_DIR:-$HOME/.openclaw}"
+CFG_PATH="${OPENCLAW_CONFIG_PATH:-$STATE_DIR/openclaw.json}"
 
 read_secret() {
   local path="$1"
   [[ -f "$path" ]] || return 1
   # Trim trailing newlines
-  tr -d '\r\n' < "$path"
+  tr -d '\r
+' < "$path"
 }
 
 # Load channel secrets (docker secrets are mounted at /run/secrets/*)
@@ -33,9 +34,55 @@ if pw="$(read_secret /run/secrets/matrix_password)"; then
 fi
 
 if gt="$(read_secret /run/secrets/gateway_token)"; then
-  export CLAWDBOT_GATEWAY_TOKEN="$gt"
-  echo "[doghouse] Loaded CLAWDBOT_GATEWAY_TOKEN from docker secret"
+  export OPENCLAW_GATEWAY_TOKEN="$gt"
+  echo "[doghouse] Loaded OPENCLAW_GATEWAY_TOKEN from docker secret"
 fi
+
+# Web search (Brave)
+if bk="$(read_secret /run/secrets/brave_api_key)"; then
+  export BRAVE_API_KEY="$bk"
+  echo "[doghouse] Loaded BRAVE_API_KEY from docker secret"
+fi
+
+# Set MongoDB connection details early (needed for matrix-indexer CLI tools)
+export MONGODB_URI="mongodb://mongo:27017"
+export MONGODB_DB="matrix_index"
+
+# MediaWiki (reuse Matrix creds by default)
+# Username is Matrix localpart (e.g. @scooby:server -> scooby)
+if [[ -z "${MEDIAWIKI_USER:-}" && -n "${MATRIX_USER_ID:-}" ]]; then
+  MEDIAWIKI_USER="${MATRIX_USER_ID#@}"
+  MEDIAWIKI_USER="${MEDIAWIKI_USER%%:*}"
+  export MEDIAWIKI_USER
+fi
+if [[ -z "${MEDIAWIKI_PASSWORD:-}" && -n "${MATRIX_PASSWORD:-}" ]]; then
+  export MEDIAWIKI_PASSWORD="${MATRIX_PASSWORD}"
+fi
+if mwurl="$(read_secret /run/secrets/mediawiki_url 2>/dev/null || true)"; then
+  if [[ -n "$mwurl" ]]; then
+    export MEDIAWIKI_URL="$mwurl"
+    echo "[doghouse] Loaded MEDIAWIKI_URL from docker secret"
+  fi
+fi
+
+# Write secrets to /etc/profile.d so they're available in ALL login shells (including SSH)
+SECRETS_FILE="/etc/profile.d/matrix-env.sh"
+{
+  echo "#!/bin/bash"
+  echo "# Matrix Indexer Environment Variables (auto-generated at container startup)"
+  [[ -n "${MATRIX_HOMESERVER:-}" ]] && echo "export MATRIX_HOMESERVER='${MATRIX_HOMESERVER}'"
+  [[ -n "${MATRIX_USER_ID:-}" ]] && echo "export MATRIX_USER_ID='${MATRIX_USER_ID}'"
+  [[ -n "${MATRIX_PASSWORD:-}" ]] && echo "export MATRIX_PASSWORD='${MATRIX_PASSWORD}'"
+  [[ -n "${DISCORD_BOT_TOKEN:-}" ]] && echo "export DISCORD_BOT_TOKEN='${DISCORD_BOT_TOKEN}'"
+  [[ -n "${OPENCLAW_GATEWAY_TOKEN:-}" ]] && echo "export OPENCLAW_GATEWAY_TOKEN='${OPENCLAW_GATEWAY_TOKEN}'"
+  [[ -n "${MEDIAWIKI_URL:-}" ]] && echo "export MEDIAWIKI_URL="
+  [[ -n "${MEDIAWIKI_USER:-}" ]] && echo "export MEDIAWIKI_USER="
+  [[ -n "${MEDIAWIKI_PASSWORD:-}" ]] && echo "export MEDIAWIKI_PASSWORD="
+  [[ -n "${MONGODB_URI:-}" ]] && echo "export MONGODB_URI='${MONGODB_URI}'"
+  [[ -n "${MONGODB_DB:-}" ]] && echo "export MONGODB_DB='${MONGODB_DB}'"
+} > "$SECRETS_FILE"
+chmod 644 "$SECRETS_FILE"
+echo "[doghouse] Secrets written to $SECRETS_FILE (sourced by all login shells)"
 
 WORKSPACE_DIR="${DOGHOUSE_WORKSPACE:-$HOME/clawd}"
 
@@ -90,80 +137,77 @@ gosu scoob git config --global --add safe.directory '*'
 
 # AUTO-LOGIN GH CLI IF TOKEN PRESENT
 if [[ -f /run/secrets/gh_token ]]; then
-  echo "[doghouse] Authenticating gh CLI..."
-  # gh auth login reads from stdin if --with-token is passed
-  cat /run/secrets/gh_token | gosu scoob gh auth login --hostname github.com --git-protocol https --with-token || echo "[doghouse] gh auth failed"
-  # Also set as env var just in case
+  echo "[doghouse] Loading GH token..."
+  # Set as env var (gh auth login --with-token was hanging, env var is sufficient)
   export GH_TOKEN="$(read_secret /run/secrets/gh_token)"
+  echo "[doghouse] GH_TOKEN loaded"
 fi
 
 # One-time non-interactive bootstrap (no TUI)
 if [[ ! -f "$CFG_PATH" ]]; then
-  echo "[doghouse] First run: moltbot setup"
-  gosu scoob /usr/local/bin/moltbot setup --workspace "$WORKSPACE_DIR"
+  echo "[doghouse] First run: openclaw setup"
+  gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw setup --workspace "$WORKSPACE_DIR"
 fi
 
 # Enforce workspace every boot (fixes legacy configs pointing to /home/node/clawd)
 echo "[doghouse] Enforcing agents.defaults.workspace=$WORKSPACE_DIR"
-gosu scoob /usr/local/bin/moltbot config set agents.defaults.workspace "$WORKSPACE_DIR" || true
+gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set agents.defaults.workspace "$WORKSPACE_DIR" || true
+# Ensure gateway is allowed to run (set unconditionally to avoid restart loop)
+echo "[doghouse] Setting gateway.mode=local"
+gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set gateway.mode local || true
+
 
 # Enforce Full Auto (no ask, no security restrictions)
 echo "[doghouse] Enforcing Full Auto (tools.exec.ask=off, tools.exec.security=full)"
-gosu scoob /usr/local/bin/moltbot config set tools.exec.ask off || true
-gosu scoob /usr/local/bin/moltbot config set tools.exec.security full || true
+gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set tools.exec.ask off || true
+gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set tools.exec.security full || true
 
 # Open DMs and Group channels for Scoob on Discord + Matrix
-# This makes the bot reachable to anyone via DM.
 echo "[doghouse] Configuring Discord channels: open"
-gosu scoob /usr/local/bin/moltbot config set channels.discord.enabled true || true
-gosu scoob /usr/local/bin/moltbot config set channels.discord.dm.policy "open" || true
-gosu scoob /usr/local/bin/moltbot config set channels.discord.dm.allowFrom "['*']" || true
-gosu scoob /usr/local/bin/moltbot config set channels.discord.groupPolicy "open" || true
+gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set channels.discord.enabled true || true
+gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set channels.discord.dm.policy "open" || true
+gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set channels.discord.dm.allowFrom "['*']" || true
+gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set channels.discord.groupPolicy "open" || true
 
-# Configure trigger patterns so Scoob responds to "scoob", "scoobert", "SCOOOOOB", etc.
-# requireMention=true means he will respond to SYSTEM.md regex patterns
 echo "[doghouse] Configuring Discord guilds: mention required (with patterns)"
-gosu scoob /usr/local/bin/moltbot config set 'channels.discord.guilds.*.requireMention' false || true
+gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set 'channels.discord.guilds.*.requireMention' false || true
 
-# Set mention patterns: regex "scoo+b" matches scoob, scooob, scooooob, scoobert, etc.
 echo "[doghouse] Configuring mention patterns: scoo+b, scooby, scoob"
-gosu scoob /usr/local/bin/moltbot config set messages.groupChat.mentionPatterns '["scoo+b", "scooby", "scoob"]' || true
+gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set messages.groupChat.mentionPatterns '["scoo+b", "scooby", "scoob"]' || true
 
 echo "[doghouse] Configuring Matrix channels: open"
-gosu scoob /usr/local/bin/moltbot config set channels.matrix.enabled true || true
-gosu scoob /usr/local/bin/moltbot config set channels.matrix.dm.policy "open" || true
-gosu scoob /usr/local/bin/moltbot config set channels.matrix.dm.allowFrom "['*']" || true
-gosu scoob /usr/local/bin/moltbot config set channels.matrix.groupPolicy "open" || true
+gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set channels.matrix.enabled true || true
+gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set channels.matrix.dm.policy "open" || true
+gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set channels.matrix.dm.allowFrom "['*']" || true
+gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set channels.matrix.groupPolicy "open" || true
 
-# Matrix groups: require mention (uses agent-level mentionPatterns regex)
 echo "[doghouse] Configuring Matrix groups: mention required (with patterns)"
-gosu scoob /usr/local/bin/moltbot config set 'channels.matrix.groups.*.requireMention' true || true
+gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set 'channels.matrix.groups.*.requireMention' true || true
 
-# Ensure gateway is allowed to run (required even after setup if mode is still unset)
-MODE="$(gosu scoob /usr/local/bin/moltbot config get gateway.mode 2>/dev/null || true)"
+# Ensure gateway is allowed to run
+MODE="$(gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config get gateway.mode 2>/dev/null || true)"
 if [[ -z "${MODE// }" || "$MODE" == "null" ]]; then
   echo "[doghouse] Setting gateway.mode=local"
-  gosu scoob /usr/local/bin/moltbot config set gateway.mode local || true
+  gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set gateway.mode local || true
 fi
 
 # Wire Scoob to the host ooba OpenAI-compatible API by default
-# (does NOT add any cloud keys; uses a dummy apiKey string)
 if [[ -n "${OPENAI_BASE_URL:-}" ]]; then
   BASE="${OPENAI_BASE_URL%/}"
-  # Ensure /v1 suffix
   if [[ "$BASE" != */v1 ]]; then BASE="$BASE/v1"; fi
 
   echo "[doghouse] Configuring OpenAI provider -> $BASE"
-  # Set the whole provider object in one go so schema validation passes.
-  gosu scoob /usr/local/bin/moltbot config set models.providers.openai "{api: 'openai-completions', baseUrl: '$BASE', apiKey: 'ooba', models: []}" || true
+  gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set models.providers.openai "{api: 'openai-completions', baseUrl: '$BASE', apiKey: 'ooba', models: []}" || true
 
-  # Auto-detect loaded model from ooba (localhost:5000/v1/models)
   echo "[doghouse] Probing ooba for loaded model..."
   if MODEL_ID=$(curl -s "$BASE/models" | jq -r '.data[0].id // empty'); then
     if [[ -n "$MODEL_ID" ]]; then
+      # IF the detected model is the long HF tag, switch it to 'heretic' alias if available
+      if [[ "$MODEL_ID" == *"HERETIC"* ]]; then
+         MODEL_ID="heretic"
+      fi
       echo "[doghouse] Detected model: $MODEL_ID"
-      # Set it as the default primary model
-      gosu scoob /usr/local/bin/moltbot config set agents.defaults.model.primary "openai/$MODEL_ID" || true
+      gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set agents.defaults.model.primary "openai/$MODEL_ID" || true
     else
       echo "[doghouse] Warn: No models returned from $BASE/models"
     fi
@@ -172,5 +216,126 @@ if [[ -n "${OPENAI_BASE_URL:-}" ]]; then
   fi
 fi
 
+# Configure Ollama provider (port 11434)
+echo "[doghouse] Configuring Ollama provider -> http://host.docker.internal:11434/v1"
+gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set models.providers.ollama "{
+  baseUrl: 'http://host.docker.internal:11434/v1',
+  apiKey: 'ollama-local',
+  api: 'openai-completions',
+  models: [
+    {
+      id: 'gpt-oss:120b',
+      name: 'gpt-oss:120b',
+      reasoning: true,
+      input: ['text'],
+      contextWindow: 131072,
+      maxTokens: 1310720
+    },
+    {
+      id: 'gpt-oss:20b',
+      name: 'gpt-oss:20b',
+      reasoning: true,
+      input: ['text'],
+      contextWindow: 131072,
+      maxTokens: 1310720
+    },
+    {
+      id: 'heretic',
+      name: 'heretic',
+      reasoning: true,
+      input: ['text'],
+      contextWindow: 65536,
+      maxTokens: 655360
+    }
+  ]
+}" || true
+
+# Setup Matrix Indexer (C#) credentials and start it
+echo "[doghouse] Checking for Matrix Indexer binary..."
+if [ -f /usr/local/bin/matrix-indexer ]; then
+  echo "[doghouse] Found matrix-indexer, configuring..."
+  # Use environment variables loaded from secrets
+  if [[ -n "${MATRIX_HOMESERVER:-}" ]]; then
+    echo "[doghouse] MATRIX_HOMESERVER is set, proceeding..."
+    # Ensure working directory exists for state file
+    mkdir -p /home/scoob/matrix-indexer
+    chown scoob:scoob /home/scoob/matrix-indexer
+    
+    # Generate .env file with correct mongo host
+    cat > /home/scoob/matrix-indexer/.env << EOF
+MATRIX_HOMESERVER=${MATRIX_HOMESERVER}
+MATRIX_USER_ID=${MATRIX_USER_ID}
+MATRIX_PASSWORD=${MATRIX_PASSWORD}
+MONGODB_URI=mongodb://mongo:27017
+MONGODB_DB=matrix_index
+EOF
+    chown scoob:scoob /home/scoob/matrix-indexer/.env
+    chmod 600 /home/scoob/matrix-indexer/.env
+    
+    echo "[doghouse] Starting Matrix Indexer in background..."
+    # Using nohup to run in background, detached from this shell
+    gosu scoob bash -c "cd /home/scoob/matrix-indexer && set -a && source .env && set +a && nohup /usr/local/bin/matrix-indexer > /tmp/indexer.log 2>&1 &" &
+    sleep 1
+    echo "[doghouse] Matrix Indexer started (PID check in 2 seconds)"
+  else
+    echo "[doghouse] Warn: MATRIX_HOMESERVER not set, skipping indexer start."
+  fi
+else
+  echo "[doghouse] Matrix Indexer binary not found at /usr/local/bin/matrix-indexer"
+fi
+
+# Setup Discord Indexer (.NET) credentials and start it
+echo "[doghouse] Checking for Discord Indexer binary..."
+if [ -f /usr/local/bin/discord-indexer ]; then
+  echo "[doghouse] Found discord-indexer, configuring..."
+  if [[ -n "${DISCORD_BOT_TOKEN:-}" ]]; then
+    mkdir -p /home/scoob/discord-indexer
+    chown scoob:scoob /home/scoob/discord-indexer
+    cat > /home/scoob/discord-indexer/.env << EOF
+DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN}
+DISCORD_GUILD_IDS=${DISCORD_GUILD_IDS:-}
+MONGODB_URI=mongodb://mongo:27017
+MONGODB_DB=discord_index
+EOF
+    chown scoob:scoob /home/scoob/discord-indexer/.env
+    chmod 600 /home/scoob/discord-indexer/.env
+    echo "[doghouse] Starting Discord Indexer in background..."
+    gosu scoob bash -c "cd /home/scoob/discord-indexer && set -a && source .env && set +a && nohup /usr/local/bin/discord-indexer > /tmp/discord-indexer.log 2>&1 &" &
+    sleep 1
+    echo "[doghouse] Discord Indexer started (PID check in 2 seconds)"
+  else
+    echo "[doghouse] Warn: DISCORD_BOT_TOKEN not set, skipping discord indexer start."
+  fi
+else
+  echo "[doghouse] Discord Indexer binary not found at /usr/local/bin/discord-indexer"
+fi
+
+# Configure Discord/Matrix credentials directly in config (env vars don't persist through gosu)
+if [[ -n "${DISCORD_BOT_TOKEN:-}" ]]; then
+  echo "[doghouse] Setting Discord bot token in config..."
+  gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set channels.discord.token "${DISCORD_BOT_TOKEN}" || true
+fi
+
+if [[ -n "${MATRIX_HOMESERVER:-}" ]]; then
+  echo "[doghouse] Setting Matrix homeserver in config..."
+  gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set channels.matrix.homeserver "${MATRIX_HOMESERVER}" || true
+fi
+
+if [[ -n "${MATRIX_USER_ID:-}" ]]; then
+  echo "[doghouse] Setting Matrix user ID in config..."
+  gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set channels.matrix.userId "${MATRIX_USER_ID}" || true
+fi
+
+if [[ -n "${MATRIX_PASSWORD:-}" ]]; then
+  echo "[doghouse] Setting Matrix password in config..."
+  gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set channels.matrix.password "${MATRIX_PASSWORD}" || true
+fi
+
+# Convenience: expose installed helper scripts on PATH (survive container recreate)
+if [[ -f /home/scoob/.openclaw/skills/mediawiki-cclub/scripts/mediawiki.sh ]]; then
+  ln -sf /home/scoob/.openclaw/skills/mediawiki-cclub/scripts/mediawiki.sh /usr/local/bin/mediawiki
+  chmod +x /usr/local/bin/mediawiki
+fi
 # Finally run the gateway as scoob
 exec gosu scoob "$@"
+

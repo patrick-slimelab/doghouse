@@ -1,63 +1,73 @@
 # syntax=docker/dockerfile:1
 
-# Build Moltbot in a dedicated stage
+# --- Stage 1: Build Moltbot ---
 FROM node:22-bookworm AS builder
 
 ARG MOLTBOT_REPO
 ARG MOLTBOT_REF
 
-RUN apt-get update \
- && apt-get install -y --no-install-recommends git ca-certificates openssh-client \
- && rm -rf /var/lib/apt/lists/*
+RUN apt-get update  && apt-get install -y --no-install-recommends git ca-certificates openssh-client  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /opt
-RUN git clone ${MOLTBOT_REPO} moltbot \
- && cd moltbot \
- && git checkout ${MOLTBOT_REF}
+RUN git clone  openclaw  && cd openclaw  && git checkout 
 
-WORKDIR /opt/moltbot
-RUN corepack enable \
- && pnpm install --frozen-lockfile \
- && pnpm build \
- && node ./moltbot.mjs plugins install @moltbot/matrix || true
+WORKDIR /opt/openclaw
+RUN corepack enable && pnpm install && pnpm build
 
+# --- Stage 2: Build Indexers (.NET) ---
+FROM mcr.microsoft.com/dotnet/sdk:8.0 AS dotnet-builder
+WORKDIR /src
 
-# Runtime image
+# Matrix
+COPY matrix-indexer.NET/ ./matrix-indexer.NET/
+RUN dotnet restore -r linux-x64 ./matrix-indexer.NET/matrix-indexer.csproj
+RUN dotnet publish ./matrix-indexer.NET/matrix-indexer.csproj -c Release -r linux-x64 -o /out/matrix-indexer --no-restore -p:PublishSingleFile=true -p:PublishTrimmed=false
+
+# Discord
+COPY discord-indexer.NET/ ./discord-indexer.NET/
+RUN dotnet restore -r linux-x64 ./discord-indexer.NET/discord-indexer.csproj
+RUN dotnet publish ./discord-indexer.NET/discord-indexer.csproj -c Release -r linux-x64 -o /out/discord-indexer --no-restore -p:PublishSingleFile=true -p:PublishTrimmed=false
+
+# --- Stage 3: Runtime Image ---
 FROM node:22-bookworm
 
-# Minimal deps for runtime + entrypoint privilege drop + sudo + curl/jq (for model probing) + sshd
-RUN apt-get update \
- && apt-get install -y --no-install-recommends ca-certificates tini gosu sudo curl jq openssh-server \
- && rm -rf /var/lib/apt/lists/*
+# Install gh CLI keyring and repo
+RUN mkdir -p -m 755 /etc/apt/keyrings  && out=/tmp/tmp.pdAXkfGOut && wget -nv -O https://cli.github.com/packages/githubcli-archive-keyring.gpg  && cat  | tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null  && chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg  && echo deb [arch=amd64 signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main | tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+
+# Minimal deps + gh + entrypoint tools
+RUN apt-get update  && apt-get install -y --no-install-recommends     ca-certificates tini gosu sudo curl jq openssh-server     gh  && rm -rf /var/lib/apt/lists/*
+
+# Install mongosh manually
+RUN curl -fsSL https://downloads.mongodb.com/compass/mongosh-2.3.8-linux-x64.tgz -o mongosh.tgz  && tar -xzf mongosh.tgz  && mv mongosh-*-linux-x64/bin/mongosh /usr/local/bin/  && rm -rf mongosh.tgz mongosh-*-linux-x64
 
 # Create scoob user (passwordless sudo *inside the container*)
-RUN useradd -m -u 1001 -s /bin/bash scoob \
- && usermod -aG sudo scoob \
- && echo 'scoob ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/scoob \
- && chmod 0440 /etc/sudoers.d/scoob
+RUN useradd -m -u 1001 -s /bin/bash scoob  && usermod -aG sudo scoob  && echo 'scoob ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/scoob  && chmod 0440 /etc/sudoers.d/scoob
 
 # Configure SSHD (listen on 2222, allow scoob, custom authorized_keys path)
-RUN mkdir /var/run/sshd \
- && echo 'Port 2222' >> /etc/ssh/sshd_config \
- && echo 'PermitRootLogin no' >> /etc/ssh/sshd_config \
- && echo 'PasswordAuthentication no' >> /etc/ssh/sshd_config \
- && echo 'AllowUsers scoob' >> /etc/ssh/sshd_config \
- && echo 'AuthorizedKeysFile /tmp/ssh/%u' >> /etc/ssh/sshd_config
+RUN mkdir /var/run/sshd  && echo 'Port 2222' >> /etc/ssh/sshd_config  && echo 'PermitRootLogin no' >> /etc/ssh/sshd_config  && echo 'PasswordAuthentication no' >> /etc/ssh/sshd_config  && echo 'AllowUsers scoob' >> /etc/ssh/sshd_config  && echo 'AuthorizedKeysFile /tmp/ssh/%u' >> /etc/ssh/sshd_config
 
-# Copy built repo (including node_modules) with correct ownership in one shot.
-# This avoids a slow recursive chown during build.
+# Copy built Moltbot
 WORKDIR /home/scoob
-COPY --from=builder --chown=scoob:scoob /opt/moltbot /home/scoob/moltbot
+# Copy openclaw to /opt (not /home/scoob to avoid volume shadowing)
+COPY --from=builder /opt/openclaw /opt/openclaw
+# Create symlink so CMD path works and make entry.js executable
+RUN ln -sf /opt/openclaw /home/scoob/openclaw && chmod +x /opt/openclaw/dist/entry.js && chmod +x /home/scoob/openclaw/dist/entry.js
 
-# Expose CLI on PATH (so `moltbot` / `clawdbot` work inside the container)
-RUN ln -sf /home/scoob/moltbot/moltbot.mjs /usr/local/bin/moltbot \
- && ln -sf /home/scoob/moltbot/moltbot.mjs /usr/local/bin/clawdbot
+# Copy built indexers
+COPY --from=dotnet-builder /out/matrix-indexer/matrix-indexer /usr/local/bin/matrix-indexer
+COPY --from=dotnet-builder /out/discord-indexer/discord-indexer /usr/local/bin/discord-indexer
+RUN chmod +x /usr/local/bin/matrix-indexer /usr/local/bin/discord-indexer
+
+# Expose CLI on PATH (point to /opt/openclaw)
+RUN ln -sf /opt/openclaw/dist/entry.js /usr/local/bin/openclaw  && ln -sf /opt/openclaw/dist/entry.js /usr/local/bin/moltbot  && ln -sf /opt/openclaw/dist/entry.js /usr/local/bin/clawdbot
 
 ENV HOME=/home/scoob
 
 COPY entrypoint.sh /usr/local/bin/doghouse-entrypoint
 RUN chmod +x /usr/local/bin/doghouse-entrypoint
 
-# Run entrypoint as root so it can fix volume ownership, then drop to node.
-ENTRYPOINT ["/usr/bin/tini","--","/usr/local/bin/doghouse-entrypoint"]
-CMD ["node","/home/scoob/moltbot/moltbot.mjs","gateway","run","--bind","loopback","--allow-unconfigured"]
+# Copy Matrix event query tool
+COPY query-matrix.sh /usr/local/bin/query-matrix
+RUN chmod +x /usr/local/bin/query-matrix
+
+ENTRYPOINT [tini, --, /usr/local/bin/doghouse-entrypoint]
