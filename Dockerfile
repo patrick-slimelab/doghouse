@@ -3,9 +3,7 @@
 # --- Stage 1: Build Moltbot ---
 FROM node:22-bookworm AS builder
 
-ARG MOLTBOT_REPO
-ARG MOLTBOT_REF
-
+ARG MOLTBOT_REPO=https://github.com/patrick-slimelab/openclaw.gitARG MOLTBOT_REF=main
 RUN apt-get update  && apt-get install -y --no-install-recommends git ca-certificates openssh-client  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /opt
