@@ -30,7 +30,7 @@ RUN dotnet publish ./discord-indexer.NET/discord-indexer.csproj -c Release -r li
 FROM node:22-bookworm
 
 # Install gh CLI keyring and repo
-RUN mkdir -p -m 755 /etc/apt/keyrings \n && out=/tmp/tmp.lLEQVyEEv1 && wget -nv -O https://cli.github.com/packages/githubcli-archive-keyring.gpg \n && cat  | tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null \n && chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \n && echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+RUN mkdir -p -m 755 /etc/apt/keyrings && out=/tmp/tmp.NAu4ySSfMk && wget -nv -O https://cli.github.com/packages/githubcli-archive-keyring.gpg && cat  | tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null && chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg && echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/github-cli.list > /dev/null
 
 # Minimal deps + gh + entrypoint tools
 RUN apt-get update  && apt-get install -y --no-install-recommends     ca-certificates tini gosu sudo curl jq openssh-server     gh  && rm -rf /var/lib/apt/lists/*
