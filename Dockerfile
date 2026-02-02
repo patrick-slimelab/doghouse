@@ -1,13 +1,19 @@
 # syntax=docker/dockerfile:1
 
-# --- Stage 1: Build Moltbot ---
+# --- Stage 1: Build OpenClaw (scrappy) ---
 FROM node:22-bookworm AS builder
 
-ARG MOLTBOT_REPO=https://github.com/patrick-slimelab/openclaw.gitARG MOLTBOT_REF=main
-RUN apt-get update  && apt-get install -y --no-install-recommends git ca-certificates openssh-client  && rm -rf /var/lib/apt/lists/*
+ARG MOLTBOT_REPO=https://github.com/patrick-slimelab/openclaw.git
+ARG MOLTBOT_REF=main
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends git ca-certificates openssh-client \
+ && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /opt
-RUN git clone  openclaw  && cd openclaw  && git checkout 
+RUN git clone ${MOLTBOT_REPO} openclaw \
+ && cd openclaw \
+ && git checkout ${MOLTBOT_REF}
 
 WORKDIR /opt/openclaw
 RUN corepack enable && pnpm install && pnpm build
@@ -30,42 +36,61 @@ RUN dotnet publish ./discord-indexer.NET/discord-indexer.csproj -c Release -r li
 FROM node:22-bookworm
 
 # Install gh CLI keyring and repo
-RUN mkdir -p -m 755 /etc/apt/keyrings && wget -nv -O /etc/apt/keyrings/githubcli-archive-keyring.gpg https://cli.github.com/packages/githubcli-archive-keyring.gpg && chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg && echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/github-cli.list > /dev/null
+RUN mkdir -p -m 755 /etc/apt/keyrings \
+ && wget -nv -O /etc/apt/keyrings/githubcli-archive-keyring.gpg https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+ && chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+ && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/github-cli.list > /dev/null
 
 # Minimal deps + gh + entrypoint tools
-RUN apt-get update  && apt-get install -y --no-install-recommends     ca-certificates tini gosu sudo curl jq openssh-server     gh  && rm -rf /var/lib/apt/lists/*
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+    ca-certificates tini gosu sudo curl jq openssh-server \
+    gh \
+ && rm -rf /var/lib/apt/lists/*
 
 # Install mongosh manually
-RUN curl -fsSL https://downloads.mongodb.com/compass/mongosh-2.3.8-linux-x64.tgz -o mongosh.tgz  && tar -xzf mongosh.tgz  && mv mongosh-*-linux-x64/bin/mongosh /usr/local/bin/  && rm -rf mongosh.tgz mongosh-*-linux-x64
+RUN curl -fsSL https://downloads.mongodb.com/compass/mongosh-2.3.8-linux-x64.tgz -o mongosh.tgz \
+ && tar -xzf mongosh.tgz \
+ && mv mongosh-*-linux-x64/bin/mongosh /usr/local/bin/ \
+ && rm -rf mongosh.tgz mongosh-*-linux-x64
 
 # Create scoob user (passwordless sudo *inside the container*)
-RUN useradd -m -u 1001 -s /bin/bash scoob  && usermod -aG sudo scoob  && echo 'scoob ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/scoob  && chmod 0440 /etc/sudoers.d/scoob
+RUN useradd -m -u 1001 -s /bin/bash scoob \
+ && usermod -aG sudo scoob \
+ && echo "scoob ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/scoob \
+ && chmod 0440 /etc/sudoers.d/scoob
 
 # Configure SSHD (listen on 2222, allow scoob, custom authorized_keys path)
-RUN mkdir /var/run/sshd  && echo 'Port 2222' >> /etc/ssh/sshd_config  && echo 'PermitRootLogin no' >> /etc/ssh/sshd_config  && echo 'PasswordAuthentication no' >> /etc/ssh/sshd_config  && echo 'AllowUsers scoob' >> /etc/ssh/sshd_config  && echo 'AuthorizedKeysFile /tmp/ssh/%u' >> /etc/ssh/sshd_config
+RUN mkdir /var/run/sshd \
+ && echo "Port 2222" >> /etc/ssh/sshd_config \
+ && echo "PermitRootLogin no" >> /etc/ssh/sshd_config \
+ && echo "PasswordAuthentication no" >> /etc/ssh/sshd_config \
+ && echo "AllowUsers scoob" >> /etc/ssh/sshd_config \
+ && echo "AuthorizedKeysFile /tmp/ssh/%u" >> /etc/ssh/sshd_config
 
-# Copy built Moltbot
+# Copy built OpenClaw
 WORKDIR /home/scoob
-# Copy openclaw to /opt (not /home/scoob to avoid volume shadowing)
 COPY --from=builder /opt/openclaw /opt/openclaw
-# Create symlink so CMD path works and make entry.js executable
-RUN ln -sf /opt/openclaw /home/scoob/openclaw && chmod +x /opt/openclaw/dist/entry.js && chmod +x /home/scoob/openclaw/dist/entry.js
+RUN ln -sf /opt/openclaw /home/scoob/openclaw \
+ && chmod +x /opt/openclaw/dist/entry.js \
+ && chmod +x /home/scoob/openclaw/dist/entry.js
 
 # Copy built indexers
 COPY --from=dotnet-builder /out/matrix-indexer/matrix-indexer /usr/local/bin/matrix-indexer
 COPY --from=dotnet-builder /out/discord-indexer/discord-indexer /usr/local/bin/discord-indexer
 RUN chmod +x /usr/local/bin/matrix-indexer /usr/local/bin/discord-indexer
 
-# Expose CLI on PATH (point to /opt/openclaw)
-RUN ln -sf /opt/openclaw/dist/entry.js /usr/local/bin/openclaw  && ln -sf /opt/openclaw/dist/entry.js /usr/local/bin/moltbot  && ln -sf /opt/openclaw/dist/entry.js /usr/local/bin/clawdbot
+# Expose CLI on PATH
+RUN ln -sf /opt/openclaw/dist/entry.js /usr/local/bin/openclaw \
+ && ln -sf /opt/openclaw/dist/entry.js /usr/local/bin/moltbot \
+ && ln -sf /opt/openclaw/dist/entry.js /usr/local/bin/clawdbot
 
 ENV HOME=/home/scoob
 
 COPY entrypoint.sh /usr/local/bin/doghouse-entrypoint
 RUN chmod +x /usr/local/bin/doghouse-entrypoint
 
-# Copy Matrix event query tool
 COPY query-matrix.sh /usr/local/bin/query-matrix
 RUN chmod +x /usr/local/bin/query-matrix
 
-ENTRYPOINT [tini, --, /usr/local/bin/doghouse-entrypoint]
+ENTRYPOINT ["tini", "--", "/usr/local/bin/doghouse-entrypoint"]
