@@ -22,7 +22,7 @@ public class Program
         Console.WriteLine("Starting Discord Indexer (.NET)");
 
         var token = GetEnv("DISCORD_BOT_TOKEN");
-        var apiBase = GetEnv("DISCORD_API_BASE", "https://discord.com/api/v10").TrimEnd(/);
+        var apiBase = GetEnv("DISCORD_API_BASE", "https://discord.com/api/v10").TrimEnd('/');
         var gatewayUrl = GetEnv("DISCORD_GATEWAY_URL", "wss://gateway.discord.gg/?v=10&encoding=json");
         var guildIdsCsv = GetEnv("DISCORD_GUILD_IDS", "");
         var intents = int.Parse(GetEnv("DISCORD_INTENTS", "513")); // GUILDS + GUILD_MESSAGES
@@ -49,7 +49,7 @@ public class Program
 
         // Seed channels for backfill
         var guildIds = guildIdsCsv
-            .Split(,, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
             .Distinct()
             .ToArray();
 
