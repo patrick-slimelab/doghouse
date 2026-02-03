@@ -329,6 +329,13 @@ if [[ -f /home/scrappy/.openclaw/skills/mediawiki-cclub/scripts/mediawiki.sh ]];
   ln -sf /home/scrappy/.openclaw/skills/mediawiki-cclub/scripts/mediawiki.sh /usr/local/bin/mediawiki
   chmod +x /usr/local/bin/mediawiki
 fi
+# Force default model so we don't accidentally use a cloud endpoint that can rate-limit (HTTP 429)
+# (and so both doghouses use the same brain by default)
+if [[ -n "${FORCE_DEFAULT_MODEL_OLLAMA:-}" ]]; then
+  echo "[doghouse] Setting default model: ${FORCE_DEFAULT_MODEL_OLLAMA}"
+  gosu scrappy env HOME=/home/scrappy OPENCLAW_STATE_DIR=/home/scrappy/.openclaw OPENCLAW_CONFIG_PATH=/home/scrappy/.openclaw/openclaw.json /usr/local/bin/openclaw config set agents.defaults.model.primary "${FORCE_DEFAULT_MODEL_OLLAMA}" || true
+fi
+
 # Finally run the gateway as scrappy
 exec gosu scrappy "$@"
 

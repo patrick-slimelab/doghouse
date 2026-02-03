@@ -47,6 +47,8 @@ services:
       TERM: xterm-256color
       NODE_ENV: production
       OPENCLAW_GATEWAY_PORT: 4000
+      # Default model (Ollama)
+      FORCE_DEFAULT_MODEL_OLLAMA: ollama/deepseek-coder:33b
       DISCORD_BOT_TOKEN_FILE: /run/secrets/discord_bot_token
       DISCORD_GUILD_IDS: 
     stdin_open: true
