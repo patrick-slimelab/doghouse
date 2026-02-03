@@ -44,7 +44,7 @@ if bk="$(read_secret /run/secrets/brave_api_key)"; then
   echo "[doghouse] Loaded BRAVE_API_KEY from docker secret"
 fi
 
-# Set MongoDB connection details early (needed for matrix-indexer CLI tools)
+# Set MongoDB connection details early
 export MONGODB_URI="mongodb://mongo:27017"
 export MONGODB_DB="matrix_index"
 
@@ -250,40 +250,7 @@ gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLA
   ]
 }" || true
 
-# Setup Matrix Indexer (C#) credentials and start it
-echo "[doghouse] Checking for Matrix Indexer binary..."
-if [ -f /usr/local/bin/matrix-indexer ]; then
-  echo "[doghouse] Found matrix-indexer, configuring..."
-  # Use environment variables loaded from secrets
-  if [[ -n "${MATRIX_HOMESERVER:-}" ]]; then
-    echo "[doghouse] MATRIX_HOMESERVER is set, proceeding..."
-    # Ensure working directory exists for state file
-    mkdir -p /home/scoob/matrix-indexer
-    chown scoob:scoob /home/scoob/matrix-indexer
-    
-    # Generate .env file with correct mongo host
-    cat > /home/scoob/matrix-indexer/.env << EOF
-MATRIX_HOMESERVER=${MATRIX_HOMESERVER}
-MATRIX_USER_ID=${MATRIX_USER_ID}
-MATRIX_PASSWORD=${MATRIX_PASSWORD}
-MONGODB_URI=mongodb://mongo:27017
-MONGODB_DB=matrix_index
-EOF
-    chown scoob:scoob /home/scoob/matrix-indexer/.env
-    chmod 600 /home/scoob/matrix-indexer/.env
-    
-    echo "[doghouse] Starting Matrix Indexer in background..."
-    # Using nohup to run in background, detached from this shell
-    gosu scoob bash -c "cd /home/scoob/matrix-indexer && set -a && source .env && set +a && nohup /usr/local/bin/matrix-indexer > /tmp/indexer.log 2>&1 &" &
-    sleep 1
-    echo "[doghouse] Matrix Indexer started (PID check in 2 seconds)"
-  else
-    echo "[doghouse] Warn: MATRIX_HOMESERVER not set, skipping indexer start."
-  fi
-else
-  echo "[doghouse] Matrix Indexer binary not found at /usr/local/bin/matrix-indexer"
-fi
-
+# (scrappy) No Matrix indexer in this image
 # Setup Discord Indexer (.NET) credentials and start it
 echo "[doghouse] Checking for Discord Indexer binary..."
 if [ -f /usr/local/bin/discord-indexer ]; then

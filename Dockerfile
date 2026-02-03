@@ -18,14 +18,9 @@ RUN git clone ${MOLTBOT_REPO} openclaw \
 WORKDIR /opt/openclaw
 RUN corepack enable && pnpm install && pnpm build
 
-# --- Stage 2: Build Indexers (.NET) ---
+# --- Stage 2: Build Discord Indexer (.NET) ---
 FROM mcr.microsoft.com/dotnet/sdk:8.0 AS dotnet-builder
 WORKDIR /src
-
-# Matrix
-COPY matrix-indexer.NET/ ./matrix-indexer.NET/
-RUN dotnet restore -r linux-x64 ./matrix-indexer.NET/matrix-indexer.csproj
-RUN dotnet publish ./matrix-indexer.NET/matrix-indexer.csproj -c Release -r linux-x64 -o /out/matrix-indexer --no-restore -p:PublishSingleFile=true -p:PublishTrimmed=false
 
 # Discord
 COPY discord-indexer.NET/ ./discord-indexer.NET/
@@ -75,10 +70,9 @@ RUN ln -sf /opt/openclaw /home/scoob/openclaw \
  && chmod +x /opt/openclaw/dist/entry.js \
  && chmod +x /home/scoob/openclaw/dist/entry.js
 
-# Copy built indexers
-COPY --from=dotnet-builder /out/matrix-indexer/matrix-indexer /usr/local/bin/matrix-indexer
+# Copy built indexer
 COPY --from=dotnet-builder /out/discord-indexer/discord-indexer /usr/local/bin/discord-indexer
-RUN chmod +x /usr/local/bin/matrix-indexer /usr/local/bin/discord-indexer
+RUN chmod +x /usr/local/bin/discord-indexer
 
 # Expose CLI on PATH
 RUN ln -sf /opt/openclaw/dist/entry.js /usr/local/bin/openclaw \
