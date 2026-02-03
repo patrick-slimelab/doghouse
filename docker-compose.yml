@@ -18,44 +18,6 @@ services:
     volumes:
     - scrappy_state:/home/scrappy/.openclaw
     - scrappy_workspace:/home/scrappy
-  # Dedicated Mongo for discord-indexer
-  discord-indexer-mongo:
-    image: mongo:6
-    container_name: discord-indexer-mongo
-    restart: unless-stopped
-    volumes:
-    - discord_indexer_mongo:/data/db
-
-  discord-indexer:
-    build:
-      context: ./discord-indexer-dotnet
-      dockerfile: Dockerfile
-      target: runtime
-    container_name: discord-indexer
-    restart: unless-stopped
-    depends_on:
-      discord-indexer-mongo:
-        condition: service_started
-    secrets:
-    - discord_bot_token
-    environment:
-      MONGODB_URI: mongodb://discord-indexer-mongo:27017
-      MONGODB_DB: discord_index
-      # Leave DISCORD_GUILD_IDS empty to auto-discover
-      DISCORD_GUILD_IDS: ""
-      DISCORD_INTENTS: "4609"
-      # Be gentle by default (tune up later)
-      INDEXER_BACKFILL_WORKERS: "1"
-      INDEXER_BACKFILL_REQUEST_DELAY_MS: "250"
-    entrypoint:
-    - /bin/sh
-    - -lc
-    - |
-      set -e
-      export DISCORD_BOT_TOKEN="$(cat /run/secrets/discord_bot_token)"
-      exec /app/discord-indexer
-
-  # Mongo for OpenClaw state/workspace (separate from indexer)
   mongo:
     image: mongo:6
     container_name: scrappy-mongo
@@ -74,8 +36,6 @@ services:
       scrappy-init:
         condition: service_completed_successfully
       mongo:
-        condition: service_started
-      discord-indexer:
         condition: service_started
     extra_hosts:
     - host.docker.internal:host-gateway
@@ -142,4 +102,3 @@ volumes:
   scrappy_state: null
   scrappy_workspace: null
   scrappy_mongo: null
-  discord_indexer_mongo: null
