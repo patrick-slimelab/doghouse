@@ -196,6 +196,10 @@ gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLA
 echo "[doghouse] Configuring mention patterns: scoo+b, scooby, scoob"
 gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set messages.groupChat.mentionPatterns '["scoo+b", "scooby", "scoob"]' || true
 
+# Message queueing (prevents rapid double-replies; especially helpful on Matrix)
+echo "[doghouse] Configuring routing.queue (collect + debounce)"
+gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set routing.queue '{ mode: "collect", debounceMs: 1500, cap: 20, drop: "summarize", byChannel: { matrix: "collect", discord: "collect" } }' --json || true
+
 echo "[doghouse] Configuring Matrix channels: open"
 gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set channels.matrix.enabled true || true
 gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set channels.matrix.dm.policy "open" || true
