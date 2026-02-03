@@ -266,6 +266,14 @@ gosu scrappy env HOME=/home/scrappy OPENCLAW_STATE_DIR=/home/scrappy/.openclaw O
       maxTokens: 1310720
     },
     {
+      id: 'deepseek-coder:33b',
+      name: 'deepseek-coder:33b',
+      reasoning: false,
+      input: ['text'],
+      contextWindow: 32768,
+      maxTokens: 32768
+    },
+    {
       id: 'heretic',
       name: 'heretic',
       reasoning: true,
