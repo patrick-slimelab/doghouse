@@ -265,8 +265,8 @@ gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLA
       maxTokens: 1310720
     },
     {
-      id: 'qwen2.5:32b-instruct',
-      name: 'qwen2.5:32b-instruct',
+      id: 'glm-4.7-flash',
+      name: 'glm-4.7-flash',
       reasoning: false,
       input: ['text'],
       contextWindow: 32768,
@@ -310,6 +310,8 @@ EOF
     gosu scoob bash -c "cd /home/scoob/matrix-indexer && set -a && source .env && set +a && nohup /usr/local/bin/matrix-indexer > /tmp/indexer.log 2>&1 &" &
     sleep 1
     echo "[doghouse] Matrix Indexer started (PID check in 2 seconds)"
+    echo "[doghouse] Starting Matrix maintenance (stale backfill reaper + room cache)"
+    gosu scoob bash -lc 'nohup /usr/local/bin/matrix-maintenance > /tmp/matrix-maintenance.log 2>&1 &'
   else
     echo "[doghouse] Warn: MATRIX_HOMESERVER not set, skipping indexer start."
   fi
