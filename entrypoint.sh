@@ -201,6 +201,10 @@ gosu scrappy env HOME=/home/scrappy OPENCLAW_STATE_DIR=/home/scrappy/.openclaw O
 echo "[doghouse] Configuring mention patterns: scrap+?"
 gosu scrappy env HOME=/home/scrappy OPENCLAW_STATE_DIR=/home/scrappy/.openclaw OPENCLAW_CONFIG_PATH=/home/scrappy/.openclaw/openclaw.json /usr/local/bin/openclaw config set messages.groupChat.mentionPatterns '["scrap+?y", "scrappy"]' || true
 
+# Message queueing (prevents rapid double-replies; especially helpful on Matrix)
+echo "[doghouse] Configuring routing.queue (collect + debounce)"
+gosu scrappy env HOME=/home/scrappy OPENCLAW_STATE_DIR=/home/scrappy/.openclaw OPENCLAW_CONFIG_PATH=/home/scrappy/.openclaw/openclaw.json /usr/local/bin/openclaw config set routing.queue '{ mode: "collect", debounceMs: 1500, cap: 20, drop: "summarize", byChannel: { matrix: "collect", discord: "collect" } }' --json || true
+
 echo "[doghouse] Configuring Matrix channels: open"
 gosu scrappy env HOME=/home/scrappy OPENCLAW_STATE_DIR=/home/scrappy/.openclaw OPENCLAW_CONFIG_PATH=/home/scrappy/.openclaw/openclaw.json /usr/local/bin/openclaw config set channels.matrix.enabled true || true
 gosu scrappy env HOME=/home/scrappy OPENCLAW_STATE_DIR=/home/scrappy/.openclaw OPENCLAW_CONFIG_PATH=/home/scrappy/.openclaw/openclaw.json /usr/local/bin/openclaw config set channels.matrix.dm.policy "open" || true
