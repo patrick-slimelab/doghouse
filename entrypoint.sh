@@ -266,8 +266,8 @@ gosu scrappy env HOME=/home/scrappy OPENCLAW_STATE_DIR=/home/scrappy/.openclaw O
       maxTokens: 1310720
     },
     {
-      id: 'deepseek-coder:33b',
-      name: 'deepseek-coder:33b',
+      id: 'qwen2.5:32b-instruct',
+      name: 'qwen2.5:32b-instruct',
       reasoning: false,
       input: ['text'],
       contextWindow: 32768,
