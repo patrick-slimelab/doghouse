@@ -61,6 +61,9 @@ services:
     - authorized_keys
     - id_ed25519
     - gh_token
+    - mediawiki_url
+    - mediawiki_user
+    - mediawiki_password
     read_only: false
     security_opt:
     - no-new-privileges:false
@@ -87,6 +90,12 @@ secrets:
     file: ./secrets/id_ed25519
   gh_token:
     file: ./secrets/gh_token
+  mediawiki_url:
+    file: ./secrets/mediawiki_url
+  mediawiki_user:
+    file: ./secrets/mediawiki_user
+  mediawiki_password:
+    file: ./secrets/mediawiki_password
 volumes:
   scrappy_state: null
   scrappy_workspace: null

@@ -30,6 +30,9 @@ RUN dotnet publish ./discord-indexer.NET/discord-indexer.csproj -c Release -r li
 # --- Stage 3: Runtime Image ---
 FROM node:22-bookworm
 
+# Prefer IPv4 in containers (avoids long hangs when IPv6 DNS exists but IPv6 route is missing)
+RUN sed -i 's/^#precedence ::ffff:0:0\/96  100/precedence ::ffff:0:0\/96  100/' /etc/gai.conf || true
+
 # Install gh CLI keyring and repo
 RUN mkdir -p -m 755 /etc/apt/keyrings \
  && wget -nv -O /etc/apt/keyrings/githubcli-archive-keyring.gpg https://cli.github.com/packages/githubcli-archive-keyring.gpg \

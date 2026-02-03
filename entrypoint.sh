@@ -4,6 +4,12 @@ set -euo pipefail
 STATE_DIR="${OPENCLAW_STATE_DIR:-$HOME/.openclaw}"
 CFG_PATH="${OPENCLAW_CONFIG_PATH:-$STATE_DIR/openclaw.json}"
 
+# Compatibility shim: older configs/scripts may still reference /home/scoob.
+# Create a stable alias so anything trying to mkdir /home/scoob doesn't explode under the scrappy user.
+if [[ ! -e /home/scoob ]]; then
+  ln -s /home/scrappy /home/scoob || true
+fi
+
 read_secret() {
   local path="$1"
   [[ -f "$path" ]] || return 1
@@ -49,7 +55,17 @@ export MONGODB_URI="mongodb://mongo:27017"
 export MONGODB_DB="matrix_index"
 
 # MediaWiki (reuse Matrix creds by default)
+DEFAULT_MEDIAWIKI_URL="https://cclub.cs.wmich.edu/w/api.php"
+
 # Username is Matrix localpart (e.g. @scrappy:server -> scrappy)
+# Prefer explicit MediaWiki creds (docker secrets), otherwise fall back to Matrix creds
+if mwu="$(read_secret /run/secrets/mediawiki_user 2>/dev/null || true)"; then
+  if [[ -n "$mwu" ]]; then export MEDIAWIKI_USER="$mwu"; fi
+fi
+if mwp="$(read_secret /run/secrets/mediawiki_password 2>/dev/null || true)"; then
+  if [[ -n "$mwp" ]]; then export MEDIAWIKI_PASSWORD="$mwp"; fi
+fi
+
 if [[ -z "${MEDIAWIKI_USER:-}" && -n "${MATRIX_USER_ID:-}" ]]; then
   MEDIAWIKI_USER="${MATRIX_USER_ID#@}"
   MEDIAWIKI_USER="${MEDIAWIKI_USER%%:*}"
@@ -65,6 +81,11 @@ if mwurl="$(read_secret /run/secrets/mediawiki_url 2>/dev/null || true)"; then
   fi
 fi
 
+# Default MediaWiki API endpoint (MediaWiki canonical API is usually /w/api.php)
+if [[ -z "${MEDIAWIKI_URL:-}" ]]; then
+  export MEDIAWIKI_URL="$DEFAULT_MEDIAWIKI_URL"
+fi
+
 # Write secrets to /etc/profile.d so they're available in ALL login shells (including SSH)
 SECRETS_FILE="/etc/profile.d/matrix-env.sh"
 {
@@ -75,9 +96,9 @@ SECRETS_FILE="/etc/profile.d/matrix-env.sh"
   [[ -n "${MATRIX_PASSWORD:-}" ]] && echo "export MATRIX_PASSWORD='${MATRIX_PASSWORD}'"
   [[ -n "${DISCORD_BOT_TOKEN:-}" ]] && echo "export DISCORD_BOT_TOKEN='${DISCORD_BOT_TOKEN}'"
   [[ -n "${OPENCLAW_GATEWAY_TOKEN:-}" ]] && echo "export OPENCLAW_GATEWAY_TOKEN='${OPENCLAW_GATEWAY_TOKEN}'"
-  [[ -n "${MEDIAWIKI_URL:-}" ]] && echo "export MEDIAWIKI_URL="
-  [[ -n "${MEDIAWIKI_USER:-}" ]] && echo "export MEDIAWIKI_USER="
-  [[ -n "${MEDIAWIKI_PASSWORD:-}" ]] && echo "export MEDIAWIKI_PASSWORD="
+  [[ -n "${MEDIAWIKI_URL:-}" ]] && echo "export MEDIAWIKI_URL='${MEDIAWIKI_URL}'"
+  [[ -n "${MEDIAWIKI_USER:-}" ]] && echo "export MEDIAWIKI_USER='${MEDIAWIKI_USER}'"
+  [[ -n "${MEDIAWIKI_PASSWORD:-}" ]] && echo "export MEDIAWIKI_PASSWORD='${MEDIAWIKI_PASSWORD}'"
   [[ -n "${MONGODB_URI:-}" ]] && echo "export MONGODB_URI='${MONGODB_URI}'"
   [[ -n "${MONGODB_DB:-}" ]] && echo "export MONGODB_DB='${MONGODB_DB}'"
 } > "$SECRETS_FILE"
@@ -141,6 +162,11 @@ if [[ -f /run/secrets/gh_token ]]; then
   # Set as env var (gh auth login --with-token was hanging, env var is sufficient)
   export GH_TOKEN="$(read_secret /run/secrets/gh_token)"
   echo "[doghouse] GH_TOKEN loaded"
+fi
+
+# Migrate legacy paths in existing config/state
+if [[ -f "$CFG_PATH" ]]; then
+  sed -i 's#/home/scoob#/home/scrappy#g' "$CFG_PATH" 2>/dev/null || true
 fi
 
 # One-time non-interactive bootstrap (no TUI)
