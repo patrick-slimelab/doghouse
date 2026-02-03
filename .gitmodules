@@ -1,0 +1,3 @@
+[submodule "discord-indexer-dotnet"]
+	path = discord-indexer-dotnet
+	url = https://github.com/patrick-slimelab/discord-indexer-dotnet.git

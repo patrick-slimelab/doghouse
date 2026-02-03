@@ -1,3 +1,11 @@
 .env
 secrets/*
 !secrets/README.md
+
+# local scratch / backups
+Dockerfile.local
+Modelfile.tools
+entrypoint.sh.bak.*
+query-matrix.js
+query-matrix.sh
+matrix-indexer.NET/
