@@ -9,23 +9,33 @@ services:
       - |
         set -e
         # Fix permissions on persisted volumes for uid/gid 1001 (scoob)
-        mkdir -p /home/scoob/.moltbot /home/scoob
-        chown -R 1001:1001 /home/scoob/.moltbot /home/scoob || true
+        mkdir -p /home/scoob/.openclaw /home/scoob
+        chown -R 1001:1001 /home/scoob/.openclaw /home/scoob || true
     volumes:
-      - doghouse_state:/home/scoob/.moltbot
+      - doghouse_state:/home/scoob/.openclaw
       - doghouse_workspace:/home/scoob
+
+  mongo:
+    image: mongo:6
+    container_name: doghouse-mongo
+    restart: unless-stopped
+    volumes:
+      - doghouse_mongo:/data/db
 
   doghouse:
     build:
       context: .
       args:
-        MOLTBOT_REPO: https://github.com/patrick-slimelab/moltbot.git
-        MOLTBOT_REF: ${MOLTBOT_REF:-main}
+        MOLTBOT_REPO: https://github.com/patrick-slimelab/openclaw.git
+        # Pin to specific commit with ollama discovery fix
+        MOLTBOT_REF: main
     container_name: doghouse
     restart: unless-stopped
     depends_on:
       doghouse-init:
         condition: service_completed_successfully
+      mongo:
+        condition: service_started
 
     # Allow container to reach host services without --network=host
     extra_hosts:
@@ -36,8 +46,8 @@ services:
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-http://host.docker.internal:5000}
 
       # Force state/config dirs so Moltbot doesn't try to migrate ~/.clawdbot -> ~/.moltbot
-      CLAWDBOT_STATE_DIR: /home/scoob/.moltbot
-      CLAWDBOT_CONFIG_PATH: /home/scoob/.moltbot/moltbot.json
+      OPENCLAW_STATE_DIR: /home/scoob/.openclaw
+      OPENCLAW_CONFIG_PATH: /home/scoob/.openclaw/openclaw.json
       DOGHOUSE_WORKSPACE: /home/scoob
 
       # Help TUIs behave
@@ -45,13 +55,22 @@ services:
 
       # Keep Node quieter
       NODE_ENV: production
+      # Force gateway port
+      OPENCLAW_GATEWAY_PORT: 4000
+      # Default model (Ollama)
+      FORCE_DEFAULT_MODEL_OLLAMA: ollama/deepseek-coder:33b
+      # Discord/Matrix credentials (loaded from secrets by entrypoint, but also need to be in env for gateway)
+      DISCORD_BOT_TOKEN_FILE: /run/secrets/discord_bot_token
+      MATRIX_HOMESERVER_FILE: /run/secrets/matrix_homeserver
+      MATRIX_USER_ID_FILE: /run/secrets/matrix_user_id
+      MATRIX_PASSWORD_FILE: /run/secrets/matrix_password
 
     stdin_open: true
     tty: true
 
     # Persist Scoob's state + workspace
     volumes:
-      - doghouse_state:/home/scoob/.moltbot
+      - doghouse_state:/home/scoob/.openclaw
       - doghouse_workspace:/home/scoob
 
     secrets:
@@ -60,7 +79,13 @@ services:
       - matrix_user_id
       - matrix_password
       - gateway_token
+      - brave_api_key
+      - mediawiki_url
+      - mediawiki_user
+      - mediawiki_password
       - authorized_keys
+      - id_ed25519
+      - gh_token
 
     # Lockdown (disabled for stability)
     read_only: false
@@ -71,17 +96,13 @@ services:
     security_opt:
       - no-new-privileges:false
 
-    cap_drop:
-      - ALL
-    cap_add:
-      - CHOWN
-      - SETUID
-      - SETGID
+    # Caps configuration removed to allow sudo
 
-    # Expose SSH (2222->2222) and Gateway (7861->18789 if needed)
+    # Expose SSH (2222->2222) and Gateway (4000)
     ports:
       - "127.0.0.1:2222:2222"
-      # - "${DOGHOUSE_PORT:-7861}:7860"
+      - "127.0.0.1:4000:4000"
+      - "5000:5000"
 
 secrets:
   discord_bot_token:
@@ -94,9 +115,22 @@ secrets:
     file: ./secrets/matrix_password
   gateway_token:
     file: ./secrets/gateway_token
+  brave_api_key:
+    file: ./secrets/brave_api_key
+  mediawiki_url:
+    file: ./secrets/mediawiki_url
+  mediawiki_user:
+    file: ./secrets/mediawiki_user
+  mediawiki_password:
+    file: ./secrets/mediawiki_password
   authorized_keys:
     file: ./secrets/authorized_keys
+  id_ed25519:
+    file: ./secrets/id_ed25519
+  gh_token:
+    file: ./secrets/gh_token
 
 volumes:
   doghouse_state:
   doghouse_workspace:
+  doghouse_mongo:
