@@ -1,0 +1,133 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Search discord-indexer MongoDB for message content.
+#
+# Examples:
+#   discord-indexer-search "button" --limit 20
+#   discord-indexer-search "dongometer" --guild 1466068838440370258
+#   discord-indexer-search "error" --channel 1466116549248024790 --limit 50
+#
+# Env (optional):
+#   MONGODB_URI=mongodb://127.0.0.1:27017
+#   MONGODB_DB=discord_index
+#   MONGO_CONTAINER_NAME=discord-indexer-mongo
+
+QUERY="${1:-}"
+
+if [[ "$QUERY" == "-h" || "$QUERY" == "--help" || -z "$QUERY" ]]; then
+  cat <<EOF
+Usage: discord-indexer-search <text> [--limit N] [--guild GUILD_ID] [--channel CHANNEL_ID] [--case-sensitive]
+
+Searches the discord-indexer MongoDB for messages whose raw.content contains <text>.
+
+Env (optional):
+  MONGODB_URI=mongodb://127.0.0.1:27017
+  MONGODB_DB=discord_index
+  MONGO_CONTAINER_NAME=discord-indexer-mongo
+EOF
+  exit 0
+fi
+
+shift || true
+
+LIMIT=20
+GUILD=""
+CHANNEL=""
+CASE_INSENSITIVE=1
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --limit)
+      LIMIT="$2"; shift 2;;
+    --guild)
+      GUILD="$2"; shift 2;;
+    --channel)
+      CHANNEL="$2"; shift 2;;
+    --case-sensitive)
+      CASE_INSENSITIVE=0; shift;;
+    -h|--help)
+      cat <<EOF
+Usage: discord-indexer-search <text> [--limit N] [--guild GUILD_ID] [--channel CHANNEL_ID] [--case-sensitive]
+
+Searches the discord-indexer MongoDB for messages whose raw.content contains <text>.
+EOF
+      exit 0;;
+    *)
+      echo "Unknown arg: $1" >&2
+      exit 2;;
+  esac
+done
+
+if [[ -z "$QUERY" ]]; then
+  echo "Usage: discord-indexer-search <text> [--limit N] [--guild ...] [--channel ...]" >&2
+  exit 2
+fi
+
+MONGODB_URI="${MONGODB_URI:-mongodb://127.0.0.1:27017}"
+MONGODB_DB="${MONGODB_DB:-discord_index}"
+MONGO_CONTAINER_NAME="${MONGO_CONTAINER_NAME:-discord-indexer-mongo}"
+
+# Build mongosh JS
+OPTS="i"
+if [[ "$CASE_INSENSITIVE" == "0" ]]; then
+  OPTS=""
+fi
+
+# Basic query
+FILTER="{ \"raw.content\": { \"\$regex\": \"${QUERY//\"/\\\"}\", \"\$options\": \"$OPTS\" } }"
+if [[ -n "$GUILD" ]]; then
+  FILTER="{ \$and: [ $FILTER, { guild_id: \"$GUILD\" } ] }"
+fi
+if [[ -n "$CHANNEL" ]]; then
+  FILTER="{ \$and: [ $FILTER, { channel_id: \"$CHANNEL\" } ] }"
+fi
+
+JS="const dbname=\"$MONGODB_DB\";
+const col=db.getSiblingDB(dbname).getCollection('messages');
+const q=$FILTER;
+col.find(q,{message_id:1,guild_id:1,channel_id:1,timestamp:1,timestamp_ms:1,'raw.author.username':1,'raw.author.global_name':1,'raw.content':1})
+  .sort({timestamp_ms:-1})
+  .limit($LIMIT)
+  .forEach(d => {
+    const who=(d.raw && d.raw.author) ? (d.raw.author.global_name || d.raw.author.username || '') : '';
+    const content=(d.raw && d.raw.content) ? d.raw.content : '';
+    print([d.timestamp || '', d.guild_id || '', d.channel_id || '', who, content].join('\t'));
+  });"
+
+docker_cmd() {
+  # Use docker if available; fall back to sudo docker when user isn't in docker group.
+  if command -v docker >/dev/null 2>&1; then
+    if docker ps >/dev/null 2>&1; then
+      echo "docker"
+      return
+    fi
+  fi
+  if command -v sudo >/dev/null 2>&1 && sudo -n docker ps >/dev/null 2>&1; then
+    echo "sudo -n docker"
+    return
+  fi
+  echo ""
+}
+
+run_mongosh() {
+  if command -v mongosh >/dev/null 2>&1; then
+    mongosh "$MONGODB_URI" --quiet --eval "$JS"
+    return
+  fi
+
+  # Fallback: run mongosh inside the mongo container
+  DCMD="$(docker_cmd)"
+  if [[ -n "$DCMD" ]]; then
+    if $DCMD ps --format '{{.Names}}' | grep -qx "${MONGO_CONTAINER_NAME}"; then
+      $DCMD exec -i "$MONGO_CONTAINER_NAME" mongosh "$MONGODB_URI" --quiet --eval "$JS"
+      return
+    fi
+  fi
+
+  echo "ERROR: mongosh not found and mongo container '$MONGO_CONTAINER_NAME' not accessible." >&2
+  echo "Install mongosh, or run with sudo, or set MONGO_CONTAINER_NAME to the running container." >&2
+  exit 1
+}
+
+run_mongosh

@@ -2,6 +2,8 @@ using System.Net.Http.Headers;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
+using System.Linq;
+using System.Collections.Concurrent;
 using MongoDB.Bson;
 using MongoDB.Driver;
 
@@ -9,13 +11,18 @@ namespace DiscordIndexer;
 
 public class Program
 {
-    private static readonly HttpClient Http = new();
+    internal static readonly HttpClient Http = new();
+
+    // Discord rate-limit coordination (header-driven). Key goal: avoid 429s by serializing per bucket.
+    private static readonly DiscordRateLimiter RateLimiter = new();
 
     private static IMongoCollection<BsonDocument>? _messages;
     private static IMongoCollection<BsonDocument>? _backfill;
+    private static IMongoCollection<BsonDocument>? _users;
 
     private static int _backfillPageSize = 100; // Discord max
     private static int _backfillWorkers = 2;
+    private static int _backfillRequestDelayMs = 500;
 
     public static async Task Main(string[] args)
     {
@@ -25,13 +32,20 @@ public class Program
         var apiBase = GetEnv("DISCORD_API_BASE", "https://discord.com/api/v10").TrimEnd('/');
         var gatewayUrl = GetEnv("DISCORD_GATEWAY_URL", "wss://gateway.discord.gg/?v=10&encoding=json");
         var guildIdsCsv = GetEnv("DISCORD_GUILD_IDS", "");
-        var intents = int.Parse(GetEnv("DISCORD_INTENTS", "513")); // GUILDS + GUILD_MESSAGES
+        // Default intents:
+        // - GUILDS (1)
+        // - GUILD_MESSAGES (512)
+        // - DIRECT_MESSAGES (4096)
+        // NOTE: MESSAGE_CONTENT (32768) is privileged and must be enabled in the Discord Developer Portal.
+        // We do NOT enable it by default.
+        var intents = int.Parse(GetEnv("DISCORD_INTENTS", "4609"));
 
         var mongoUri = GetEnv("MONGODB_URI", "mongodb://localhost:27017");
         var mongoDbName = GetEnv("MONGODB_DB", "discord_index");
 
         _backfillPageSize = int.Parse(GetEnv("INDEXER_BACKFILL_PAGE_SIZE", _backfillPageSize.ToString()));
         _backfillWorkers = int.Parse(GetEnv("INDEXER_BACKFILL_WORKERS", _backfillWorkers.ToString()));
+        _backfillRequestDelayMs = int.Parse(GetEnv("INDEXER_BACKFILL_REQUEST_DELAY_MS", _backfillRequestDelayMs.ToString()));
 
         if (_backfillPageSize is < 1 or > 100) _backfillPageSize = 100;
 
@@ -41,6 +55,7 @@ public class Program
         var db = client.GetDatabase(mongoDbName);
         _messages = db.GetCollection<BsonDocument>("messages");
         _backfill = db.GetCollection<BsonDocument>("channel_backfill");
+        _users = db.GetCollection<BsonDocument>("users");
         await EnsureIndexes();
         Console.WriteLine("MongoDB indexes ensured.");
 
@@ -55,10 +70,17 @@ public class Program
 
         if (guildIds.Length == 0)
         {
-            Console.WriteLine("WARN: DISCORD_GUILD_IDS not set; cannot enumerate channels for backfill.");
-            Console.WriteLine("Set DISCORD_GUILD_IDS=comma,separated,guildIds to enable history backfill.");
+            Console.WriteLine("DISCORD_GUILD_IDS not set; discovering guilds via Discord API...");
+            guildIds = await ListGuildIds(apiBase);
+
+            if (guildIds.Length == 0)
+            {
+                Console.WriteLine("WARN: No guilds returned from /users/@me/guilds. Backfill disabled.");
+                Console.WriteLine("(Live gateway ingestion will still run.)");
+            }
         }
-        else
+
+        if (guildIds.Length > 0)
         {
             foreach (var gid in guildIds)
             {
@@ -91,7 +113,7 @@ public class Program
 
     private static async Task EnsureIndexes()
     {
-        if (_messages == null || _backfill == null) return;
+        if (_messages == null || _backfill == null || _users == null) return;
 
         await _messages.Indexes.CreateOneAsync(new CreateIndexModel<BsonDocument>(
             Builders<BsonDocument>.IndexKeys.Ascending("message_id"),
@@ -100,12 +122,70 @@ public class Program
         await _messages.Indexes.CreateOneAsync(new CreateIndexModel<BsonDocument>(
             Builders<BsonDocument>.IndexKeys.Ascending("channel_id").Descending("timestamp_ms")));
 
+        await _messages.Indexes.CreateOneAsync(new CreateIndexModel<BsonDocument>(
+            Builders<BsonDocument>.IndexKeys.Ascending("author_id").Descending("timestamp_ms")));
+
         await _backfill.Indexes.CreateOneAsync(new CreateIndexModel<BsonDocument>(
             Builders<BsonDocument>.IndexKeys.Ascending("channel_id"),
             new CreateIndexOptions { Unique = true }));
 
         await _backfill.Indexes.CreateOneAsync(new CreateIndexModel<BsonDocument>(
             Builders<BsonDocument>.IndexKeys.Ascending("done").Ascending("updated_at")));
+
+        await _users.Indexes.CreateOneAsync(new CreateIndexModel<BsonDocument>(
+            Builders<BsonDocument>.IndexKeys.Ascending("user_id"),
+            new CreateIndexOptions { Unique = true }));
+
+        await _users.Indexes.CreateOneAsync(new CreateIndexModel<BsonDocument>(
+            Builders<BsonDocument>.IndexKeys.Descending("last_seen_ms")));
+    }
+
+    private static async Task<string[]> ListGuildIds(string apiBase)
+    {
+        // Uses GET /users/@me/guilds (Bot token)
+        // Docs: https://discord.com/developers/docs/resources/user#get-current-user-guilds
+        // This is paginated. We request up to 200 per page.
+
+        var ids = new List<string>();
+        string? after = null;
+
+        while (true)
+        {
+            var url = $"{apiBase}/users/@me/guilds?limit=200";
+            if (!string.IsNullOrEmpty(after)) url += $"&after={Uri.EscapeDataString(after)}";
+
+            var resp = await RateLimiter.GetAsync(url, routeKey: "GET:/users/@me/guilds");
+            if (!resp.IsSuccessStatusCode)
+            {
+                Console.WriteLine($"WARN: Failed to list guilds: {(int)resp.StatusCode} {resp.ReasonPhrase}");
+                return ids.ToArray();
+            }
+
+            var json = await resp.Content.ReadAsStringAsync();
+            var arr = JsonDocument.Parse(json).RootElement;
+            if (arr.ValueKind != JsonValueKind.Array) break;
+
+            var page = arr.EnumerateArray().ToArray();
+            if (page.Length == 0) break;
+
+            foreach (var g in page)
+            {
+                var id = g.TryGetProperty("id", out var idEl) ? idEl.GetString() : null;
+                var name = g.TryGetProperty("name", out var nameEl) ? nameEl.GetString() : null;
+
+                if (!string.IsNullOrEmpty(id))
+                {
+                    ids.Add(id);
+                    Console.WriteLine($"Discovered guild: {name ?? "(no-name)"} ({id})");
+                    after = id;
+                }
+            }
+
+            // If the API returns less than limit, we're done.
+            if (page.Length < 200) break;
+        }
+
+        return ids.Distinct().ToArray();
     }
 
     private static async Task SeedGuildChannels(string apiBase, string guildId)
@@ -114,7 +194,7 @@ public class Program
 
         Console.WriteLine($"Fetching channels for guild {guildId}...");
         var url = $"{apiBase}/guilds/{guildId}/channels";
-        var resp = await Http.GetAsync(url);
+        var resp = await RateLimiter.GetAsync(url, routeKey: "GET:/guilds/:guildId/channels");
         if (!resp.IsSuccessStatusCode)
         {
             Console.WriteLine($"WARN: Failed to list channels for guild {guildId}: {(int)resp.StatusCode} {resp.ReasonPhrase}");
@@ -189,11 +269,14 @@ public class Program
                     ? claim["cursor_before"].AsString
                     : null;
 
-                var (newCursor, done, count) = await BackfillOnePage(apiBase, channelId, cursor);
+                var (newCursor, done, count, errorDelta, retryAfterMs) = await BackfillOnePage(apiBase, channelId, cursor);
 
-                await UpdateChannelState(channelId, newCursor, done, 0);
+                await UpdateChannelState(channelId, newCursor, done, errorDelta);
 
-                await Task.Delay(350);
+                // Throttle: honor Retry-After/rate limit headers when present, otherwise use a small steady delay.
+                var delay = retryAfterMs > 0 ? retryAfterMs : _backfillRequestDelayMs;
+                if (delay < 0) delay = 0;
+                await Task.Delay(delay);
             }
             catch (Exception ex)
             {
@@ -232,8 +315,10 @@ public class Program
 
         var filter = Builders<BsonDocument>.Filter.Eq("channel_id", channelId);
 
+        var cursorVal = newCursor == null ? (BsonValue)BsonNull.Value : new BsonString(newCursor);
+
         var upd = Builders<BsonDocument>.Update
-            .Set("cursor_before", newCursor == null ? BsonValue.Create(BsonNull.Value) : BsonValue.Create(newCursor))
+            .Set<BsonValue>("cursor_before", cursorVal)
             .Set("done", done)
             .Set("claimed", false)
             .Set("updated_at", DateTime.UtcNow);
@@ -244,29 +329,83 @@ public class Program
         await _backfill.UpdateOneAsync(filter, upd);
     }
 
-    private static async Task<(string? newCursor, bool done, int count)> BackfillOnePage(string apiBase, string channelId, string? before)
+    private static async Task<(string? newCursor, bool done, int count, int errorDelta, int retryAfterMs)> BackfillOnePage(string apiBase, string channelId, string? before)
     {
         var url = $"{apiBase}/channels/{channelId}/messages?limit={_backfillPageSize}";
         if (!string.IsNullOrEmpty(before))
             url += $"&before={before}";
 
-        var resp = await Http.GetAsync(url);
+        var resp = await RateLimiter.GetAsync(url, routeKey: "GET:/channels/:channelId/messages");
+
+        // Rate limiting
+        if ((int)resp.StatusCode == 429)
+        {
+            // Discord usually returns Retry-After in seconds (as header), sometimes also in JSON body.
+            var retry = resp.Headers.RetryAfter?.Delta;
+            var retryMs = retry != null ? (int)Math.Ceiling(retry.Value.TotalMilliseconds) : 2000;
+
+            // Try parsing JSON body retry_after (seconds)
+            try
+            {
+                var body = await resp.Content.ReadAsStringAsync();
+                var root429 = JsonDocument.Parse(body).RootElement;
+                if (root429.TryGetProperty("retry_after", out var ra) && ra.TryGetDouble(out var secs))
+                {
+                    retryMs = (int)Math.Ceiling(secs * 1000);
+                }
+            }
+            catch
+            {
+                // ignore
+            }
+
+            if (retryMs < 250) retryMs = 250;
+            Console.WriteLine($"WARN: Backfill rate-limited for channel {channelId}: 429. Sleeping {retryMs}ms then retrying.");
+            return (before, false, 0, 1, retryMs);
+        }
+
         if (!resp.IsSuccessStatusCode)
         {
             Console.WriteLine($"WARN: Backfill fetch failed for channel {channelId}: {(int)resp.StatusCode} {resp.ReasonPhrase}");
-            return (before, false, 0);
+            return (before, false, 0, 1, _backfillRequestDelayMs);
+        }
+
+        // If we are about to hit the limit, honor reset-after headers.
+        // Discord headers: X-RateLimit-Remaining, X-RateLimit-Reset-After (seconds)
+        var preDelayMs = 0;
+        try
+        {
+            if (resp.Headers.TryGetValues("X-RateLimit-Remaining", out var remVals))
+            {
+                var remStr = remVals.FirstOrDefault();
+                if (int.TryParse(remStr, out var remaining) && remaining <= 0)
+                {
+                    if (resp.Headers.TryGetValues("X-RateLimit-Reset-After", out var resetVals))
+                    {
+                        var resetStr = resetVals.FirstOrDefault();
+                        if (double.TryParse(resetStr, out var resetAfterSecs))
+                        {
+                            preDelayMs = (int)Math.Ceiling(resetAfterSecs * 1000);
+                        }
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // ignore header parse issues
         }
 
         var json = await resp.Content.ReadAsStringAsync();
         var root = JsonDocument.Parse(json).RootElement;
         if (root.ValueKind != JsonValueKind.Array)
-            return (before, false, 0);
+            return (before, false, 0, 1, preDelayMs);
 
         var msgs = root.EnumerateArray().ToList();
         if (msgs.Count == 0)
         {
             Console.WriteLine($"Backfill done for channel {channelId}");
-            return (before, true, 0);
+            return (before, true, 0, 0, preDelayMs);
         }
 
         var oldest = msgs.Last().GetProperty("id").GetString();
@@ -277,7 +416,7 @@ public class Program
         }
 
         Console.WriteLine($"Backfilled {msgs.Count} messages from channel {channelId}");
-        return (oldest, false, msgs.Count);
+        return (oldest, false, msgs.Count, 0, preDelayMs);
     }
 
     private static async Task InsertMessage(JsonElement msg, string source)
@@ -289,6 +428,16 @@ public class Program
         var timestamp = msg.TryGetProperty("timestamp", out var ts) ? ts.GetString() : null;
         var guildId = msg.TryGetProperty("guild_id", out var gid) ? gid.GetString() : null;
 
+        string? authorId = null;
+        string? authorUsername = null;
+        string? authorGlobalName = null;
+        if (msg.TryGetProperty("author", out var author) && author.ValueKind == JsonValueKind.Object)
+        {
+            authorId = author.TryGetProperty("id", out var aid) ? aid.GetString() : null;
+            authorUsername = author.TryGetProperty("username", out var au) ? au.GetString() : null;
+            authorGlobalName = author.TryGetProperty("global_name", out var agn) ? agn.GetString() : null;
+        }
+
         long tsMs = 0;
         if (!string.IsNullOrEmpty(timestamp) && DateTimeOffset.TryParse(timestamp, out var dto))
             tsMs = dto.ToUnixTimeMilliseconds();
@@ -296,9 +445,10 @@ public class Program
         var doc = new BsonDocument
         {
             { "message_id", id },
-            { "channel_id", channelId == null ? BsonValue.Create(BsonNull.Value) : BsonValue.Create(channelId) },
-            { "guild_id", guildId == null ? BsonValue.Create(BsonNull.Value) : BsonValue.Create(guildId) },
-            { "timestamp", timestamp == null ? BsonValue.Create(BsonNull.Value) : BsonValue.Create(timestamp) },
+            { "channel_id", channelId == null ? (BsonValue)BsonNull.Value : new BsonString(channelId) },
+            { "guild_id", guildId == null ? (BsonValue)BsonNull.Value : new BsonString(guildId) },
+            { "author_id", authorId == null ? (BsonValue)BsonNull.Value : new BsonString(authorId) },
+            { "timestamp", timestamp == null ? (BsonValue)BsonNull.Value : new BsonString(timestamp) },
             { "timestamp_ms", tsMs },
             { "source", source },
             { "raw", BsonDocument.Parse(msg.GetRawText()) },
@@ -312,6 +462,27 @@ public class Program
         catch (MongoWriteException mwx) when (mwx.WriteError.Category == ServerErrorCategory.DuplicateKey)
         {
             // ignore duplicates
+        }
+
+        // Maintain a small user lookup table for ID -> latest name (helps profiling by user_id)
+        if (_users != null && !string.IsNullOrEmpty(authorId))
+        {
+            var uf = Builders<BsonDocument>.Filter.Eq("user_id", authorId);
+            var uu = Builders<BsonDocument>.Update
+                .Set("user_id", authorId)
+                .Set("username", authorUsername == null ? (BsonValue)BsonNull.Value : new BsonString(authorUsername))
+                .Set("global_name", authorGlobalName == null ? (BsonValue)BsonNull.Value : new BsonString(authorGlobalName))
+                .Set("last_seen_ms", tsMs)
+                .Set("updated_at", DateTime.UtcNow);
+
+            try
+            {
+                await _users.UpdateOneAsync(uf, uu, new UpdateOptions { IsUpsert = true });
+            }
+            catch
+            {
+                // ignore lookup races/errors
+            }
         }
     }
 

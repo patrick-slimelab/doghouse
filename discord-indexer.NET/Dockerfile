@@ -7,7 +7,7 @@ COPY discord-indexer.csproj .
 RUN dotnet restore -r linux-x64
 
 # Copy source and publish
-COPY Program.cs .
+COPY *.cs .
 RUN dotnet publish -c Release -r linux-x64 -o /out --no-restore -p:PublishSingleFile=true -p:PublishTrimmed=false
 
 # Output stage (just to copy the binary out)
