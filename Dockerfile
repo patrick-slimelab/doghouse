@@ -49,26 +49,26 @@ RUN curl -fsSL https://downloads.mongodb.com/compass/mongosh-2.3.8-linux-x64.tgz
  && mv mongosh-*-linux-x64/bin/mongosh /usr/local/bin/ \
  && rm -rf mongosh.tgz mongosh-*-linux-x64
 
-# Create scoob user (passwordless sudo *inside the container*)
-RUN useradd -m -u 1001 -s /bin/bash scoob \
- && usermod -aG sudo scoob \
- && echo "scoob ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/scoob \
- && chmod 0440 /etc/sudoers.d/scoob
+# Create scrappy user (passwordless sudo *inside the container*)
+RUN useradd -m -u 1001 -s /bin/bash scrappy \
+ && usermod -aG sudo scrappy \
+ && echo "scrappy ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/scrappy \
+ && chmod 0440 /etc/sudoers.d/scrappy
 
-# Configure SSHD (listen on 2222, allow scoob, custom authorized_keys path)
+# Configure SSHD (listen on 2222, allow scrappy, custom authorized_keys path)
 RUN mkdir /var/run/sshd \
  && echo "Port 2222" >> /etc/ssh/sshd_config \
  && echo "PermitRootLogin no" >> /etc/ssh/sshd_config \
  && echo "PasswordAuthentication no" >> /etc/ssh/sshd_config \
- && echo "AllowUsers scoob" >> /etc/ssh/sshd_config \
+ && echo "AllowUsers scrappy" >> /etc/ssh/sshd_config \
  && echo "AuthorizedKeysFile /tmp/ssh/%u" >> /etc/ssh/sshd_config
 
 # Copy built OpenClaw
-WORKDIR /home/scoob
+WORKDIR /home/scrappy
 COPY --from=builder /opt/openclaw /opt/openclaw
-RUN ln -sf /opt/openclaw /home/scoob/openclaw \
+RUN ln -sf /opt/openclaw /home/scrappy/openclaw \
  && chmod +x /opt/openclaw/dist/entry.js \
- && chmod +x /home/scoob/openclaw/dist/entry.js
+ && chmod +x /home/scrappy/openclaw/dist/entry.js
 
 # Copy built indexer
 COPY --from=dotnet-builder /out/discord-indexer/discord-indexer /usr/local/bin/discord-indexer
@@ -79,7 +79,7 @@ RUN ln -sf /opt/openclaw/dist/entry.js /usr/local/bin/openclaw \
  && ln -sf /opt/openclaw/dist/entry.js /usr/local/bin/moltbot \
  && ln -sf /opt/openclaw/dist/entry.js /usr/local/bin/clawdbot
 
-ENV HOME=/home/scoob
+ENV HOME=/home/scrappy
 
 COPY entrypoint.sh /usr/local/bin/doghouse-entrypoint
 RUN chmod +x /usr/local/bin/doghouse-entrypoint

@@ -8,16 +8,16 @@ services:
     - -lc
     - 'set -e
 
-      # Fix permissions on persisted volumes for uid/gid 1001 (scoob)
+      # Fix permissions on persisted volumes for uid/gid 1001 (scrappy)
 
-      mkdir -p /home/scoob/.openclaw /home/scoob
+      mkdir -p /home/scrappy/.openclaw /home/scrappy
 
-      chown -R 1001:1001 /home/scoob/.openclaw /home/scoob || true
+      chown -R 1001:1001 /home/scrappy/.openclaw /home/scrappy || true
 
       '
     volumes:
-    - scrappy_state:/home/scoob/.openclaw
-    - scrappy_workspace:/home/scoob
+    - scrappy_state:/home/scrappy/.openclaw
+    - scrappy_workspace:/home/scrappy
   mongo:
     image: mongo:6
     container_name: scrappy-mongo
@@ -41,9 +41,9 @@ services:
     - host.docker.internal:host-gateway
     environment:
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-http://host.docker.internal:5000}
-      OPENCLAW_STATE_DIR: /home/scoob/.openclaw
-      OPENCLAW_CONFIG_PATH: /home/scoob/.openclaw/openclaw.json
-      DOGHOUSE_WORKSPACE: /home/scoob
+      OPENCLAW_STATE_DIR: /home/scrappy/.openclaw
+      OPENCLAW_CONFIG_PATH: /home/scrappy/.openclaw/openclaw.json
+      DOGHOUSE_WORKSPACE: /home/scrappy
       TERM: xterm-256color
       NODE_ENV: production
       OPENCLAW_GATEWAY_PORT: 4000
@@ -52,8 +52,8 @@ services:
     stdin_open: true
     tty: true
     volumes:
-    - scrappy_state:/home/scoob/.openclaw
-    - scrappy_workspace:/home/scoob
+    - scrappy_state:/home/scrappy/.openclaw
+    - scrappy_workspace:/home/scrappy
     secrets:
     - discord_bot_token
     - gateway_token

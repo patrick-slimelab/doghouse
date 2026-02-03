@@ -49,7 +49,7 @@ export MONGODB_URI="mongodb://mongo:27017"
 export MONGODB_DB="matrix_index"
 
 # MediaWiki (reuse Matrix creds by default)
-# Username is Matrix localpart (e.g. @scooby:server -> scooby)
+# Username is Matrix localpart (e.g. @scrappy:server -> scrappy)
 if [[ -z "${MEDIAWIKI_USER:-}" && -n "${MATRIX_USER_ID:-}" ]]; then
   MEDIAWIKI_USER="${MATRIX_USER_ID#@}"
   MEDIAWIKI_USER="${MEDIAWIKI_USER%%:*}"
@@ -86,21 +86,21 @@ echo "[doghouse] Secrets written to $SECRETS_FILE (sourced by all login shells)"
 
 WORKSPACE_DIR="${DOGHOUSE_WORKSPACE:-$HOME/clawd}"
 
-# Ensure state + workspace dirs exist + are writable by scoob
+# Ensure state + workspace dirs exist + are writable by scrappy
 mkdir -p "$STATE_DIR" "$WORKSPACE_DIR"
 
 # If the volume contains old root-owned/other-uid files, try to fix ownership.
 # Some Docker setups can emit noisy EPERM/EACCES for unreadable entries; that's OK.
-chown -R scoob:scoob "$STATE_DIR" "$WORKSPACE_DIR" 2>/dev/null || true
+chown -R scrappy:scrappy "$STATE_DIR" "$WORKSPACE_DIR" 2>/dev/null || true
 
 # Configure SSH if authorized_keys secret is present
 if [[ -f /run/secrets/authorized_keys ]]; then
   echo "[doghouse] Setting up SSH authorized_keys in /tmp/ssh..."
   rm -rf /tmp/ssh
   mkdir -p /tmp/ssh
-  cat /run/secrets/authorized_keys > /tmp/ssh/scoob
-  chmod 600 /tmp/ssh/scoob
-  chown scoob:scoob /tmp/ssh/scoob
+  cat /run/secrets/authorized_keys > /tmp/ssh/scrappy
+  chmod 600 /tmp/ssh/scrappy
+  chown scrappy:scrappy /tmp/ssh/scrappy
   
   # Start sshd in background (as root, before dropping privs)
   echo "[doghouse] Starting sshd on port 2222..."
@@ -110,30 +110,30 @@ fi
 # COPY GITHUB KEY TO ~/.ssh IF PRESENT
 if [[ -f /run/secrets/id_ed25519 ]]; then
   echo "[doghouse] Setting up GitHub SSH key in ~/.ssh..."
-  mkdir -p /home/scoob/.ssh
+  mkdir -p /home/scrappy/.ssh
   
   # Remove any stale keys first
-  rm -f /home/scoob/.ssh/id_ed25519 /home/scoob/.ssh/id_ed25519.pub
+  rm -f /home/scrappy/.ssh/id_ed25519 /home/scrappy/.ssh/id_ed25519.pub
   
   # Copy private key
-  cat /run/secrets/id_ed25519 > /home/scoob/.ssh/id_ed25519
-  chmod 600 /home/scoob/.ssh/id_ed25519
-  chown scoob:scoob /home/scoob/.ssh/id_ed25519
+  cat /run/secrets/id_ed25519 > /home/scrappy/.ssh/id_ed25519
+  chmod 600 /home/scrappy/.ssh/id_ed25519
+  chown scrappy:scrappy /home/scrappy/.ssh/id_ed25519
   
   # Regenerate public key from private key
-  ssh-keygen -y -f /home/scoob/.ssh/id_ed25519 > /home/scoob/.ssh/id_ed25519.pub
-  chmod 644 /home/scoob/.ssh/id_ed25519.pub
-  chown scoob:scoob /home/scoob/.ssh/id_ed25519.pub
-  echo "[doghouse] SSH public key: $(cat /home/scoob/.ssh/id_ed25519.pub)"
+  ssh-keygen -y -f /home/scrappy/.ssh/id_ed25519 > /home/scrappy/.ssh/id_ed25519.pub
+  chmod 644 /home/scrappy/.ssh/id_ed25519.pub
+  chown scrappy:scrappy /home/scrappy/.ssh/id_ed25519.pub
+  echo "[doghouse] SSH public key: $(cat /home/scrappy/.ssh/id_ed25519.pub)"
   
   # Add github.com to known_hosts to avoid prompt
-  ssh-keyscan github.com > /home/scoob/.ssh/known_hosts 2>/dev/null
-  chown scoob:scoob /home/scoob/.ssh/known_hosts
+  ssh-keyscan github.com > /home/scrappy/.ssh/known_hosts 2>/dev/null
+  chown scrappy:scrappy /home/scrappy/.ssh/known_hosts
 fi
 
 # Configure git to trust all directories (prevents "dubious ownership" errors)
 echo "[doghouse] Configuring git safe.directory"
-gosu scoob git config --global --add safe.directory '*'
+gosu scrappy git config --global --add safe.directory '*'
 
 # AUTO-LOGIN GH CLI IF TOKEN PRESENT
 if [[ -f /run/secrets/gh_token ]]; then
@@ -146,49 +146,49 @@ fi
 # One-time non-interactive bootstrap (no TUI)
 if [[ ! -f "$CFG_PATH" ]]; then
   echo "[doghouse] First run: openclaw setup"
-  gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw setup --workspace "$WORKSPACE_DIR"
+  gosu scrappy env HOME=/home/scrappy OPENCLAW_STATE_DIR=/home/scrappy/.openclaw OPENCLAW_CONFIG_PATH=/home/scrappy/.openclaw/openclaw.json /usr/local/bin/openclaw setup --workspace "$WORKSPACE_DIR"
 fi
 
 # Enforce workspace every boot (fixes legacy configs pointing to /home/node/clawd)
 echo "[doghouse] Enforcing agents.defaults.workspace=$WORKSPACE_DIR"
-gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set agents.defaults.workspace "$WORKSPACE_DIR" || true
+gosu scrappy env HOME=/home/scrappy OPENCLAW_STATE_DIR=/home/scrappy/.openclaw OPENCLAW_CONFIG_PATH=/home/scrappy/.openclaw/openclaw.json /usr/local/bin/openclaw config set agents.defaults.workspace "$WORKSPACE_DIR" || true
 # Ensure gateway is allowed to run (set unconditionally to avoid restart loop)
 echo "[doghouse] Setting gateway.mode=local"
-gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set gateway.mode local || true
+gosu scrappy env HOME=/home/scrappy OPENCLAW_STATE_DIR=/home/scrappy/.openclaw OPENCLAW_CONFIG_PATH=/home/scrappy/.openclaw/openclaw.json /usr/local/bin/openclaw config set gateway.mode local || true
 
 
 # Enforce Full Auto (no ask, no security restrictions)
 echo "[doghouse] Enforcing Full Auto (tools.exec.ask=off, tools.exec.security=full)"
-gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set tools.exec.ask off || true
-gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set tools.exec.security full || true
+gosu scrappy env HOME=/home/scrappy OPENCLAW_STATE_DIR=/home/scrappy/.openclaw OPENCLAW_CONFIG_PATH=/home/scrappy/.openclaw/openclaw.json /usr/local/bin/openclaw config set tools.exec.ask off || true
+gosu scrappy env HOME=/home/scrappy OPENCLAW_STATE_DIR=/home/scrappy/.openclaw OPENCLAW_CONFIG_PATH=/home/scrappy/.openclaw/openclaw.json /usr/local/bin/openclaw config set tools.exec.security full || true
 
 # Open DMs and Group channels for Scoob on Discord + Matrix
 echo "[doghouse] Configuring Discord channels: open"
-gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set channels.discord.enabled true || true
-gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set channels.discord.dm.policy "open" || true
-gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set channels.discord.dm.allowFrom "['*']" || true
-gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set channels.discord.groupPolicy "open" || true
+gosu scrappy env HOME=/home/scrappy OPENCLAW_STATE_DIR=/home/scrappy/.openclaw OPENCLAW_CONFIG_PATH=/home/scrappy/.openclaw/openclaw.json /usr/local/bin/openclaw config set channels.discord.enabled true || true
+gosu scrappy env HOME=/home/scrappy OPENCLAW_STATE_DIR=/home/scrappy/.openclaw OPENCLAW_CONFIG_PATH=/home/scrappy/.openclaw/openclaw.json /usr/local/bin/openclaw config set channels.discord.dm.policy "open" || true
+gosu scrappy env HOME=/home/scrappy OPENCLAW_STATE_DIR=/home/scrappy/.openclaw OPENCLAW_CONFIG_PATH=/home/scrappy/.openclaw/openclaw.json /usr/local/bin/openclaw config set channels.discord.dm.allowFrom "['*']" || true
+gosu scrappy env HOME=/home/scrappy OPENCLAW_STATE_DIR=/home/scrappy/.openclaw OPENCLAW_CONFIG_PATH=/home/scrappy/.openclaw/openclaw.json /usr/local/bin/openclaw config set channels.discord.groupPolicy "open" || true
 
 echo "[doghouse] Configuring Discord guilds: mention required (with patterns)"
-gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set 'channels.discord.guilds.*.requireMention' false || true
+gosu scrappy env HOME=/home/scrappy OPENCLAW_STATE_DIR=/home/scrappy/.openclaw OPENCLAW_CONFIG_PATH=/home/scrappy/.openclaw/openclaw.json /usr/local/bin/openclaw config set 'channels.discord.guilds.*.requireMention' false || true
 
-echo "[doghouse] Configuring mention patterns: scoo+b, scooby, scoob"
-gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set messages.groupChat.mentionPatterns '["scoo+b", "scooby", "scoob"]' || true
+echo "[doghouse] Configuring mention patterns: scrap+?"
+gosu scrappy env HOME=/home/scrappy OPENCLAW_STATE_DIR=/home/scrappy/.openclaw OPENCLAW_CONFIG_PATH=/home/scrappy/.openclaw/openclaw.json /usr/local/bin/openclaw config set messages.groupChat.mentionPatterns '["scrap+?y", "scrappy"]' || true
 
 echo "[doghouse] Configuring Matrix channels: open"
-gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set channels.matrix.enabled true || true
-gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set channels.matrix.dm.policy "open" || true
-gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set channels.matrix.dm.allowFrom "['*']" || true
-gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set channels.matrix.groupPolicy "open" || true
+gosu scrappy env HOME=/home/scrappy OPENCLAW_STATE_DIR=/home/scrappy/.openclaw OPENCLAW_CONFIG_PATH=/home/scrappy/.openclaw/openclaw.json /usr/local/bin/openclaw config set channels.matrix.enabled true || true
+gosu scrappy env HOME=/home/scrappy OPENCLAW_STATE_DIR=/home/scrappy/.openclaw OPENCLAW_CONFIG_PATH=/home/scrappy/.openclaw/openclaw.json /usr/local/bin/openclaw config set channels.matrix.dm.policy "open" || true
+gosu scrappy env HOME=/home/scrappy OPENCLAW_STATE_DIR=/home/scrappy/.openclaw OPENCLAW_CONFIG_PATH=/home/scrappy/.openclaw/openclaw.json /usr/local/bin/openclaw config set channels.matrix.dm.allowFrom "['*']" || true
+gosu scrappy env HOME=/home/scrappy OPENCLAW_STATE_DIR=/home/scrappy/.openclaw OPENCLAW_CONFIG_PATH=/home/scrappy/.openclaw/openclaw.json /usr/local/bin/openclaw config set channels.matrix.groupPolicy "open" || true
 
 echo "[doghouse] Configuring Matrix groups: mention required (with patterns)"
-gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set 'channels.matrix.groups.*.requireMention' true || true
+gosu scrappy env HOME=/home/scrappy OPENCLAW_STATE_DIR=/home/scrappy/.openclaw OPENCLAW_CONFIG_PATH=/home/scrappy/.openclaw/openclaw.json /usr/local/bin/openclaw config set 'channels.matrix.groups.*.requireMention' true || true
 
 # Ensure gateway is allowed to run
-MODE="$(gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config get gateway.mode 2>/dev/null || true)"
+MODE="$(gosu scrappy env HOME=/home/scrappy OPENCLAW_STATE_DIR=/home/scrappy/.openclaw OPENCLAW_CONFIG_PATH=/home/scrappy/.openclaw/openclaw.json /usr/local/bin/openclaw config get gateway.mode 2>/dev/null || true)"
 if [[ -z "${MODE// }" || "$MODE" == "null" ]]; then
   echo "[doghouse] Setting gateway.mode=local"
-  gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set gateway.mode local || true
+  gosu scrappy env HOME=/home/scrappy OPENCLAW_STATE_DIR=/home/scrappy/.openclaw OPENCLAW_CONFIG_PATH=/home/scrappy/.openclaw/openclaw.json /usr/local/bin/openclaw config set gateway.mode local || true
 fi
 
 # Wire Scoob to the host ooba OpenAI-compatible API by default
@@ -197,7 +197,7 @@ if [[ -n "${OPENAI_BASE_URL:-}" ]]; then
   if [[ "$BASE" != */v1 ]]; then BASE="$BASE/v1"; fi
 
   echo "[doghouse] Configuring OpenAI provider -> $BASE"
-  gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set models.providers.openai "{api: 'openai-completions', baseUrl: '$BASE', apiKey: 'ooba', models: []}" || true
+  gosu scrappy env HOME=/home/scrappy OPENCLAW_STATE_DIR=/home/scrappy/.openclaw OPENCLAW_CONFIG_PATH=/home/scrappy/.openclaw/openclaw.json /usr/local/bin/openclaw config set models.providers.openai "{api: 'openai-completions', baseUrl: '$BASE', apiKey: 'ooba', models: []}" || true
 
   echo "[doghouse] Probing ooba for loaded model..."
   if MODEL_ID=$(curl -s "$BASE/models" | jq -r '.data[0].id // empty'); then
@@ -207,7 +207,7 @@ if [[ -n "${OPENAI_BASE_URL:-}" ]]; then
          MODEL_ID="heretic"
       fi
       echo "[doghouse] Detected model: $MODEL_ID"
-      gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set agents.defaults.model.primary "openai/$MODEL_ID" || true
+      gosu scrappy env HOME=/home/scrappy OPENCLAW_STATE_DIR=/home/scrappy/.openclaw OPENCLAW_CONFIG_PATH=/home/scrappy/.openclaw/openclaw.json /usr/local/bin/openclaw config set agents.defaults.model.primary "openai/$MODEL_ID" || true
     else
       echo "[doghouse] Warn: No models returned from $BASE/models"
     fi
@@ -218,7 +218,7 @@ fi
 
 # Configure Ollama provider (port 11434)
 echo "[doghouse] Configuring Ollama provider -> http://host.docker.internal:11434/v1"
-gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set models.providers.ollama "{
+gosu scrappy env HOME=/home/scrappy OPENCLAW_STATE_DIR=/home/scrappy/.openclaw OPENCLAW_CONFIG_PATH=/home/scrappy/.openclaw/openclaw.json /usr/local/bin/openclaw config set models.providers.ollama "{
   baseUrl: 'http://host.docker.internal:11434/v1',
   apiKey: 'ollama-local',
   api: 'openai-completions',
@@ -256,18 +256,18 @@ echo "[doghouse] Checking for Discord Indexer binary..."
 if [ -f /usr/local/bin/discord-indexer ]; then
   echo "[doghouse] Found discord-indexer, configuring..."
   if [[ -n "${DISCORD_BOT_TOKEN:-}" ]]; then
-    mkdir -p /home/scoob/discord-indexer
-    chown scoob:scoob /home/scoob/discord-indexer
-    cat > /home/scoob/discord-indexer/.env << EOF
+    mkdir -p /home/scrappy/discord-indexer
+    chown scrappy:scrappy /home/scrappy/discord-indexer
+    cat > /home/scrappy/discord-indexer/.env << EOF
 DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN}
 DISCORD_GUILD_IDS=${DISCORD_GUILD_IDS:-}
 MONGODB_URI=mongodb://mongo:27017
 MONGODB_DB=discord_index
 EOF
-    chown scoob:scoob /home/scoob/discord-indexer/.env
-    chmod 600 /home/scoob/discord-indexer/.env
+    chown scrappy:scrappy /home/scrappy/discord-indexer/.env
+    chmod 600 /home/scrappy/discord-indexer/.env
     echo "[doghouse] Starting Discord Indexer in background..."
-    gosu scoob bash -c "cd /home/scoob/discord-indexer && set -a && source .env && set +a && nohup /usr/local/bin/discord-indexer > /tmp/discord-indexer.log 2>&1 &" &
+    gosu scrappy bash -c "cd /home/scrappy/discord-indexer && set -a && source .env && set +a && nohup /usr/local/bin/discord-indexer > /tmp/discord-indexer.log 2>&1 &" &
     sleep 1
     echo "[doghouse] Discord Indexer started (PID check in 2 seconds)"
   else
@@ -280,29 +280,29 @@ fi
 # Configure Discord/Matrix credentials directly in config (env vars don't persist through gosu)
 if [[ -n "${DISCORD_BOT_TOKEN:-}" ]]; then
   echo "[doghouse] Setting Discord bot token in config..."
-  gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set channels.discord.token "${DISCORD_BOT_TOKEN}" || true
+  gosu scrappy env HOME=/home/scrappy OPENCLAW_STATE_DIR=/home/scrappy/.openclaw OPENCLAW_CONFIG_PATH=/home/scrappy/.openclaw/openclaw.json /usr/local/bin/openclaw config set channels.discord.token "${DISCORD_BOT_TOKEN}" || true
 fi
 
 if [[ -n "${MATRIX_HOMESERVER:-}" ]]; then
   echo "[doghouse] Setting Matrix homeserver in config..."
-  gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set channels.matrix.homeserver "${MATRIX_HOMESERVER}" || true
+  gosu scrappy env HOME=/home/scrappy OPENCLAW_STATE_DIR=/home/scrappy/.openclaw OPENCLAW_CONFIG_PATH=/home/scrappy/.openclaw/openclaw.json /usr/local/bin/openclaw config set channels.matrix.homeserver "${MATRIX_HOMESERVER}" || true
 fi
 
 if [[ -n "${MATRIX_USER_ID:-}" ]]; then
   echo "[doghouse] Setting Matrix user ID in config..."
-  gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set channels.matrix.userId "${MATRIX_USER_ID}" || true
+  gosu scrappy env HOME=/home/scrappy OPENCLAW_STATE_DIR=/home/scrappy/.openclaw OPENCLAW_CONFIG_PATH=/home/scrappy/.openclaw/openclaw.json /usr/local/bin/openclaw config set channels.matrix.userId "${MATRIX_USER_ID}" || true
 fi
 
 if [[ -n "${MATRIX_PASSWORD:-}" ]]; then
   echo "[doghouse] Setting Matrix password in config..."
-  gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set channels.matrix.password "${MATRIX_PASSWORD}" || true
+  gosu scrappy env HOME=/home/scrappy OPENCLAW_STATE_DIR=/home/scrappy/.openclaw OPENCLAW_CONFIG_PATH=/home/scrappy/.openclaw/openclaw.json /usr/local/bin/openclaw config set channels.matrix.password "${MATRIX_PASSWORD}" || true
 fi
 
 # Convenience: expose installed helper scripts on PATH (survive container recreate)
-if [[ -f /home/scoob/.openclaw/skills/mediawiki-cclub/scripts/mediawiki.sh ]]; then
-  ln -sf /home/scoob/.openclaw/skills/mediawiki-cclub/scripts/mediawiki.sh /usr/local/bin/mediawiki
+if [[ -f /home/scrappy/.openclaw/skills/mediawiki-cclub/scripts/mediawiki.sh ]]; then
+  ln -sf /home/scrappy/.openclaw/skills/mediawiki-cclub/scripts/mediawiki.sh /usr/local/bin/mediawiki
   chmod +x /usr/local/bin/mediawiki
 fi
-# Finally run the gateway as scoob
-exec gosu scoob "$@"
+# Finally run the gateway as scrappy
+exec gosu scrappy "$@"
 
