@@ -29,7 +29,7 @@ services:
       context: .
       args:
         MOLTBOT_REPO: https://github.com/patrick-slimelab/openclaw.git
-        MOLTBOT_REF: scrappy
+        MOLTBOT_REF: main
     container_name: scrappy
     restart: unless-stopped
     depends_on:
