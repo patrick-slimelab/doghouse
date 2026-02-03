@@ -40,6 +40,7 @@ services:
     extra_hosts:
     - host.docker.internal:host-gateway
     environment:
+      FORCE_DEFAULT_MODEL_OLLAMA: ollama/glm-4.7-flash
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-http://host.docker.internal:5000}
       OPENCLAW_STATE_DIR: /home/scrappy/.openclaw
       OPENCLAW_CONFIG_PATH: /home/scrappy/.openclaw/openclaw.json
@@ -48,7 +49,6 @@ services:
       NODE_ENV: production
       OPENCLAW_GATEWAY_PORT: 4000
       # Default model (Ollama)
-      FORCE_DEFAULT_MODEL_OLLAMA: ollama/qwen2.5:32b-instruct
       DISCORD_BOT_TOKEN_FILE: /run/secrets/discord_bot_token
       DISCORD_GUILD_IDS: 
     stdin_open: true

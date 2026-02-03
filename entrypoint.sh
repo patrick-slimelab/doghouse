@@ -266,8 +266,8 @@ gosu scrappy env HOME=/home/scrappy OPENCLAW_STATE_DIR=/home/scrappy/.openclaw O
       maxTokens: 1310720
     },
     {
-      id: 'qwen2.5:32b-instruct',
-      name: 'qwen2.5:32b-instruct',
+      id: 'glm-4.7-flash',
+      name: 'glm-4.7-flash',
       reasoning: false,
       input: ['text'],
       contextWindow: 32768,
