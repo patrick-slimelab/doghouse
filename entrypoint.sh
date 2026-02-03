@@ -265,8 +265,8 @@ gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLA
       maxTokens: 1310720
     },
     {
-      id: 'deepseek-coder:33b',
-      name: 'deepseek-coder:33b',
+      id: 'qwen2.5:32b-instruct',
+      name: 'qwen2.5:32b-instruct',
       reasoning: false,
       input: ['text'],
       contextWindow: 32768,

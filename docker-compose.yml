@@ -58,7 +58,7 @@ services:
       # Force gateway port
       OPENCLAW_GATEWAY_PORT: 4000
       # Default model (Ollama)
-      FORCE_DEFAULT_MODEL_OLLAMA: ollama/deepseek-coder:33b
+      FORCE_DEFAULT_MODEL_OLLAMA: ollama/qwen2.5:32b-instruct
       # Discord/Matrix credentials (loaded from secrets by entrypoint, but also need to be in env for gateway)
       DISCORD_BOT_TOKEN_FILE: /run/secrets/discord_bot_token
       MATRIX_HOMESERVER_FILE: /run/secrets/matrix_homeserver
