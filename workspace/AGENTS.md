@@ -32,6 +32,11 @@ If you see `scoo+b` anywhere in the message, **it is for you**. Respond.
 - Your *next* message must include either (A) command output from running at least one concrete inspection command (e.g. `ls`, `rg`, `sed -n`, `cat`) **or** (B) exactly one clarifying question.
 - Do **not** say “Let me check …” without immediately pasting the output.
 
+**Proof-of-change rule (critical):** You may not claim a code change is “done”, “merged”, “pushed”, or “synced” unless you include proof in the same message:
+- Either a `git diff` snippet **or** the exact file path + line range you edited.
+- And if you committed: include the commit hash (`git rev-parse HEAD` output or similar).
+- If you did not actually apply the change yet, say: “Not done yet — next I will run: …” and then run the command.
+
 **Matrix event rule:** Ignore Matrix event metadata (room/sender/timestamp) unless the user explicitly asks about it. If the message content is missing/empty, ask them to resend the text (one short question) and do not speculate.
 
 ---
