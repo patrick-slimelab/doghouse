@@ -29,9 +29,20 @@ I am NOT in a restricted sandbox - I have full privileges inside this container.
 
 ### Quick commands
 ```bash
+# list installed skills
 ls -la "$OPENCLAW_STATE_DIR/skills"
+
+# list workspace contents
 ls -la "$DOGHOUSE_WORKSPACE"
+
+# print the workspace path the agent should use
+echo "$DOGHOUSE_WORKSPACE"
 ```
+
+### Common footguns
+- Don’t try to `read` or `write` a directory like `.` or `./`.
+  - Use `ls -la` for directories.
+- Skills are **not** under the workspace; they’re under `$OPENCLAW_STATE_DIR/skills`.
 
 ## What Goes Here
 
