@@ -50,6 +50,10 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
+    # Pre-auth GitHub CLI via GH_TOKEN in ./secrets/github.env
+    env_file:
+      - ./secrets/github.env
+
     environment:
       FORCE_DEFAULT_MODEL_OLLAMA: ollama/frob/qwen3-coder-next:80b-a3b-f16
       # Point Scoob's OpenAI-compatible client to the host ooba server
