@@ -116,29 +116,34 @@ else
   git remote add upstream "$UPSTREAM_URL"
 fi
 
-# Ensure working branch exists
-set +e
-if ! git show-ref --verify --quiet "refs/heads/$BRANCH"; then
-  git fetch --quiet origin "$BRANCH" 2>/dev/null || true
-  if git show-ref --verify --quiet "refs/remotes/origin/$BRANCH"; then
-    git checkout -q -b "$BRANCH" "origin/$BRANCH"
-  else
-    git checkout -q -b "$BRANCH"
-  fi
-else
-  git checkout -q "$BRANCH"
-fi
-set -e
-
-# Update from origin
+# Fetch latest refs
 git fetch --quiet origin || true
-# Fast-forward local to origin if possible
-git pull --quiet --ff-only origin "$BRANCH" 2>/dev/null || true
-
-# Rebase onto upstream baseline
 log "Fetching upstream baseline: $BASELINE_BRANCH"
 git fetch --quiet upstream "$BASELINE_BRANCH" || true
 
+# Preserve whatever currently exists (in case this directory was previously used for something else)
+current_head="$(git rev-parse HEAD 2>/dev/null || true)"
+if [[ -n "$current_head" ]]; then
+  ts="$(date +%Y%m%d-%H%M%S)"
+  git branch "backup/legacy-$ts" "$current_head" >/dev/null 2>&1 || true
+fi
+
+# Force the working branch to exist and be checked out.
+# If origin has the branch, base on that.
+# Else, base on upstream baseline.
+# Else, create an empty branch.
+if git show-ref --verify --quiet "refs/remotes/origin/$BRANCH"; then
+  log "Checking out $BRANCH from origin/$BRANCH"
+  git checkout -q -B "$BRANCH" "origin/$BRANCH"
+elif git show-ref --verify --quiet "refs/remotes/upstream/$BASELINE_BRANCH"; then
+  log "Origin/$BRANCH not found; creating $BRANCH from upstream/$BASELINE_BRANCH"
+  git checkout -q -B "$BRANCH" "upstream/$BASELINE_BRANCH"
+else
+  log "WARN: neither origin/$BRANCH nor upstream/$BASELINE_BRANCH exist; creating empty $BRANCH"
+  git checkout -q -B "$BRANCH"
+fi
+
+# Rebase branch onto upstream baseline (policy 2)
 if git show-ref --verify --quiet "refs/remotes/upstream/$BASELINE_BRANCH"; then
   log "Rebasing $BRANCH onto upstream/$BASELINE_BRANCH"
   if ! git rebase "upstream/$BASELINE_BRANCH"; then
@@ -146,12 +151,13 @@ if git show-ref --verify --quiet "refs/remotes/upstream/$BASELINE_BRANCH"; then
     git rebase --abort || true
     exit 0
   fi
-
-  log "Pushing rebased branch to origin (force-with-lease)"
-  git push --force-with-lease origin "$BRANCH"
 else
-  log "WARN: upstream baseline branch not found: $BASELINE_BRANCH"
+  log "WARN: upstream baseline branch not found: $BASELINE_BRANCH (skipping rebase)"
 fi
+
+# Push rewritten/updated branch
+log "Pushing $BRANCH to origin (force-with-lease)"
+git push --force-with-lease origin "$BRANCH" || true
 
 log "OK: live workspace is git-backed at $LIVE_WORKSPACE"
 
