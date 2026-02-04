@@ -11,6 +11,13 @@ services:
         # Fix permissions on persisted volumes for uid/gid 1001 (scoob)
         mkdir -p /home/scoob/.openclaw /home/scoob
         chown -R 1001:1001 /home/scoob/.openclaw /home/scoob || true
+
+        # Ensure config is readable by scoob (some past runs may have created it as root:root 0600)
+        if [ -f /home/scoob/.openclaw/openclaw.json ]; then
+          chown 1001:1001 /home/scoob/.openclaw/openclaw.json || true
+          chmod 600 /home/scoob/.openclaw/openclaw.json || true
+        fi
+        chmod 700 /home/scoob/.openclaw || true
     volumes:
       - doghouse_state:/home/scoob/.openclaw
       - doghouse_workspace:/home/scoob

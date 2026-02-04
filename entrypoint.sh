@@ -108,6 +108,13 @@ mkdir -p "$STATE_DIR" "$WORKSPACE_DIR"
 # Some Docker setups can emit noisy EPERM/EACCES for unreadable entries; that's OK.
 chown -R scoob:scoob "$STATE_DIR" "$WORKSPACE_DIR" 2>/dev/null || true
 
+# Hardening: ensure config file perms are sane (gateway must be able to read it)
+if [[ -f "$CFG_PATH" ]]; then
+  chown scoob:scoob "$CFG_PATH" 2>/dev/null || true
+  chmod 600 "$CFG_PATH" 2>/dev/null || true
+fi
+chmod 700 "$STATE_DIR" 2>/dev/null || true
+
 # --- Dongometer auto-start (managed inside container, no systemd) ---
 if [[ -x /home/scoob/dongometer/dongometerctl ]]; then
   echo [doghouse] Auto-starting dongometer
