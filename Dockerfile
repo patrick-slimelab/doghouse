@@ -29,6 +29,13 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates tini gosu sudo curl jq openssh-server \
  && rm -rf /var/lib/apt/lists/*
 
+# Install mongosh (used by discord-indexer-search / Mongo inspection)
+RUN curl -fsSL https://downloads.mongodb.com/compass/mongosh-2.3.8-linux-x64.tgz -o /tmp/mongosh.tgz \
+ && tar -xzf /tmp/mongosh.tgz -C /tmp \
+ && mv /tmp/mongosh-*/bin/mongosh /usr/local/bin/mongosh \
+ && chmod +x /usr/local/bin/mongosh \
+ && rm -rf /tmp/mongosh.tgz /tmp/mongosh-*
+
 # Create scoob user (passwordless sudo *inside the container*)
 RUN useradd -m -u 1001 -s /bin/bash scoob \
  && usermod -aG sudo scoob \
