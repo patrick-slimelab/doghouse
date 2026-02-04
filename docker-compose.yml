@@ -9,8 +9,9 @@ services:
       - |
         set -e
         # Fix permissions on persisted volumes for uid/gid 1001 (scoob)
-        mkdir -p /home/scoob/.openclaw /home/scoob
-        chown -R 1001:1001 /home/scoob/.openclaw /home/scoob || true
+        # NOTE: We no longer mount the workspace at /home/scoob. Workspace now lives at ~/.openclaw/workspace.
+        mkdir -p /home/scoob/.openclaw /home/scoob/.openclaw/workspace
+        chown -R 1001:1001 /home/scoob/.openclaw || true
 
         # Ensure config is readable by scoob (some past runs may have created it as root:root 0600)
         if [ -f /home/scoob/.openclaw/openclaw.json ]; then
@@ -20,7 +21,8 @@ services:
         chmod 700 /home/scoob/.openclaw || true
     volumes:
       - doghouse_state:/home/scoob/.openclaw
-      - doghouse_workspace:/home/scoob
+      - doghouse_openclaw_workspace:/home/scoob/.openclaw/workspace
+      - doghouse_workspace:/home/scoob/_workspace_legacy:ro
 
   mongo:
     image: mongo:6
@@ -56,7 +58,7 @@ services:
       # Force state/config dirs so Moltbot doesn't try to migrate ~/.clawdbot -> ~/.moltbot
       OPENCLAW_STATE_DIR: /home/scoob/.openclaw
       OPENCLAW_CONFIG_PATH: /home/scoob/.openclaw/openclaw.json
-      DOGHOUSE_WORKSPACE: /home/scoob
+      DOGHOUSE_WORKSPACE: /home/scoob/.openclaw/workspace
 
       # Help TUIs behave
       TERM: xterm-256color
@@ -78,7 +80,8 @@ services:
     # Persist Scoob's state + workspace
     volumes:
       - doghouse_state:/home/scoob/.openclaw
-      - doghouse_workspace:/home/scoob
+      - doghouse_openclaw_workspace:/home/scoob/.openclaw/workspace
+      - doghouse_workspace:/home/scoob/_workspace_legacy:ro
 
     secrets:
       - discord_bot_token
@@ -139,5 +142,6 @@ secrets:
 
 volumes:
   doghouse_state:
+  doghouse_openclaw_workspace:
   doghouse_workspace:
   doghouse_mongo:
