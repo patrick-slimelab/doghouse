@@ -64,7 +64,9 @@ RUN ln -sf /opt/openclaw/dist/entry.js /usr/local/bin/openclaw \
 ENV HOME=/home/scoob
 
 COPY entrypoint.sh /usr/local/bin/doghouse-entrypoint
-RUN chmod +x /usr/local/bin/doghouse-entrypoint
+COPY scripts/ /opt/doghouse/scripts/
+RUN chmod +x /usr/local/bin/doghouse-entrypoint \
+ && chmod -R +x /opt/doghouse/scripts
 
 # Run entrypoint as root so it can fix volume ownership, then drop to scoob.
 ENTRYPOINT ["/usr/bin/tini","--","/usr/local/bin/doghouse-entrypoint"]

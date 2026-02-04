@@ -163,12 +163,36 @@ fi
 echo "[doghouse] Configuring git safe.directory"
 gosu scoob git config --global --add safe.directory '*'
 
-# AUTO-LOGIN GH CLI IF TOKEN PRESENT
+# --- GitHub CLI auth + workspace repo bootstrap ---
+# Prefer GH_TOKEN from docker secret (and/or env_file) for non-interactive auth.
 if [[ -f /run/secrets/gh_token ]]; then
-  echo "[doghouse] Loading GH token..."
-  # Set as env var (gh auth login --with-token was hanging, env var is sufficient)
   export GH_TOKEN="$(read_secret /run/secrets/gh_token)"
-  echo "[doghouse] GH_TOKEN loaded"
+  echo "[doghouse] GH_TOKEN loaded from docker secret"
+fi
+
+# Ensure gh auth is initialized for the scoob user (creates ~/.config/gh/hosts.yml)
+if command -v gh >/dev/null 2>&1; then
+  if ! gosu scoob gh auth status -h "${GH_HOST:-github.com}" >/dev/null 2>&1; then
+    if [[ -n "${GH_TOKEN:-}" ]]; then
+      echo "[doghouse] Pre-authenticating gh for scoob (non-interactive)"
+      # Do NOT echo token
+      gosu scoob bash -lc 'printf "%s" "$GH_TOKEN" | gh auth login -h "${GH_HOST:-github.com}" --with-token >/dev/null 2>&1 || true'
+    else
+      echo "[doghouse] WARN: GH_TOKEN not set; gh will require manual login (exec in and run: gh auth login)"
+    fi
+  fi
+fi
+
+# Bootstrap the private workspace repo (best-effort). This keeps the live workspace in sync with repo ./workspace.
+if [[ -x /opt/doghouse/scripts/github-workspace-bootstrap.sh ]]; then
+  echo "[doghouse] Bootstrapping GitHub workspace repo -> $WORKSPACE_DIR"
+  gosu scoob env DOGHOUSE_WORKSPACE="$WORKSPACE_DIR" bash -lc '/opt/doghouse/scripts/github-workspace-bootstrap.sh' || true
+
+  # Start background autosync commits
+  if [[ -x /opt/doghouse/scripts/github-workspace-autocommit.sh ]]; then
+    echo "[doghouse] Starting workspace autosync commits"
+    gosu scoob env DOGHOUSE_WORKSPACE="$WORKSPACE_DIR" bash -lc 'nohup /opt/doghouse/scripts/github-workspace-autocommit.sh >/tmp/github-workspace-autocommit.log 2>&1 &' || true
+  fi
 fi
 
 # One-time non-interactive bootstrap (no TUI)
