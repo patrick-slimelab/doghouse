@@ -99,7 +99,8 @@ SECRETS_FILE="/etc/profile.d/matrix-env.sh"
 chmod 644 "$SECRETS_FILE"
 echo "[doghouse] Secrets written to $SECRETS_FILE (sourced by all login shells)"
 
-WORKSPACE_DIR="${DOGHOUSE_WORKSPACE:-$HOME/clawd}"
+# Workspace root. We intentionally default to /home/scoob to match legacy layout.
+WORKSPACE_DIR="${DOGHOUSE_WORKSPACE:-/home/scoob}"
 
 # Ensure state + workspace dirs exist + are writable by scoob
 mkdir -p "$STATE_DIR" "$WORKSPACE_DIR"

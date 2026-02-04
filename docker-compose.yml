@@ -2,6 +2,8 @@ services:
   doghouse-init:
     image: alpine:3.19
     container_name: ${BOT_CANONICAL_NAME:-scoob}-doghouse-init
+    environment:
+      BOT_CANONICAL_NAME: ${BOT_CANONICAL_NAME:-scoob}
     restart: "no"
     command:
       - sh
@@ -21,7 +23,7 @@ services:
         chmod 700 /home/scoob/.openclaw || true
     volumes:
       - doghouse_state:/home/scoob/.openclaw
-      - doghouse_openclaw_workspace:/home/scoob/.openclaw/workspace
+      - doghouse_home:/home/scoob
       - doghouse_workspace:/home/scoob/_workspace_legacy:ro
 
   mongo:
@@ -64,7 +66,8 @@ services:
       # Force state/config dirs so Moltbot doesn't try to migrate ~/.clawdbot -> ~/.moltbot
       OPENCLAW_STATE_DIR: /home/scoob/.openclaw
       OPENCLAW_CONFIG_PATH: /home/scoob/.openclaw/openclaw.json
-      DOGHOUSE_WORKSPACE: /home/scoob/.openclaw/workspace
+      # OpenClaw workspace root (git-backed). We use /home/scoob to match legacy layout.
+      DOGHOUSE_WORKSPACE: /home/scoob
 
       # Help TUIs behave
       TERM: xterm-256color
@@ -83,10 +86,10 @@ services:
     stdin_open: true
     tty: true
 
-    # Persist Scoob's state + workspace
+    # Persist Scoob's state + home/workspace
     volumes:
+      - doghouse_home:/home/scoob
       - doghouse_state:/home/scoob/.openclaw
-      - doghouse_openclaw_workspace:/home/scoob/.openclaw/workspace
       - doghouse_workspace:/home/scoob/_workspace_legacy:ro
 
     secrets:
@@ -149,8 +152,8 @@ secrets:
 volumes:
   doghouse_state:
     name: ${BOT_CANONICAL_NAME:-scoob}_doghouse_state
-  doghouse_openclaw_workspace:
-    name: ${BOT_CANONICAL_NAME:-scoob}_doghouse_openclaw_workspace
+  doghouse_home:
+    name: ${BOT_CANONICAL_NAME:-scoob}_doghouse_home
   doghouse_workspace:
     name: ${BOT_CANONICAL_NAME:-scoob}_doghouse_workspace_legacy
   doghouse_mongo:

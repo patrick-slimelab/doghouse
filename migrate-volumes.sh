@@ -33,7 +33,7 @@ old_openclaw_ws_vol="doghouse_doghouse_openclaw_workspace"
 old_state_vol="doghouse_doghouse_state"
 
 new_legacy_vol="${CANONICAL_NAME}_doghouse_workspace_legacy"
-new_workspace_vol="${CANONICAL_NAME}_doghouse_openclaw_workspace"
+new_home_vol="${CANONICAL_NAME}_doghouse_home"
 new_state_vol="${CANONICAL_NAME}_doghouse_state"
 
 say() { echo "[migrate] $*"; }
@@ -47,7 +47,7 @@ for v in "$old_workspace_vol" "$old_openclaw_ws_vol" "$old_state_vol"; do
 done
 
 # Create new volumes if absent
-for v in "$new_legacy_vol" "$new_workspace_vol" "$new_state_vol"; do
+for v in "$new_legacy_vol" "$new_home_vol" "$new_state_vol"; do
   if docker volume inspect "$v" >/dev/null 2>&1; then
     :
   else
@@ -63,12 +63,19 @@ docker run --rm \
   -v "$new_legacy_vol":/to \
   alpine:3.19 sh -lc 'set -e; cp -a /from/. /to/'
 
-# Copy (empty) old openclaw workspace volume -> new openclaw workspace volume (best-effort)
-# (Some setups may have data there; we preserve it.)
-say "Copying openclaw workspace (if any): $old_openclaw_ws_vol -> $new_workspace_vol"
+# Also copy legacy workspace into the new HOME/workspace volume.
+# This makes /home/scoob start with the rescued files.
+say "Copying legacy workspace into home: $old_workspace_vol -> $new_home_vol"
+docker run --rm \
+  -v "$old_workspace_vol":/from:ro \
+  -v "$new_home_vol":/to \
+  alpine:3.19 sh -lc 'set -e; cp -a /from/. /to/'
+
+# Preserve anything that was in the old openclaw workspace volume by copying it into HOME too (best-effort).
+say "Copying old openclaw workspace into home (if any): $old_openclaw_ws_vol -> $new_home_vol"
 docker run --rm \
   -v "$old_openclaw_ws_vol":/from:ro \
-  -v "$new_workspace_vol":/to \
+  -v "$new_home_vol":/to \
   alpine:3.19 sh -lc 'set -e; cp -a /from/. /to/ || true'
 
 # Copy state volume -> new state volume (full copy)
@@ -79,7 +86,7 @@ docker run --rm \
   alpine:3.19 sh -lc 'set -e; cp -a /from/. /to/'
 
 say "Done copying. New volumes:" 
-docker volume ls | grep -E "^local\s+${CANONICAL_NAME}_doghouse_(state|openclaw_workspace|workspace_legacy)" || true
+docker volume ls | grep -E "^local\s+${CANONICAL_NAME}_doghouse_(state|home|workspace_legacy)" || true
 
 say "Next: run ./deploy.sh --rebuild to recreate containers with new named volumes."
 
