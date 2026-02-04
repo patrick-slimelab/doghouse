@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+URL="${1:-}"
+if [[ -z "$URL" || "$URL" == "-h" || "$URL" == "--help" ]]; then
+  cat <<'EOF'
+Usage: onion-fetch <http(s)://...onion/...>
+
+Fetch a URL through a Tor SOCKS5 proxy.
+
+Env:
+  TOR_SOCKS5_HOST  (default: host.docker.internal)
+  TOR_SOCKS5_PORT  (default: 9050)
+EOF
+  exit 0
+fi
+
+HOST="${TOR_SOCKS5_HOST:-host.docker.internal}"
+PORT="${TOR_SOCKS5_PORT:-9050}"
+
+# Use --socks5-hostname so DNS resolution happens via Tor.
+exec curl -fsSL --socks5-hostname "$HOST:$PORT" "$URL"

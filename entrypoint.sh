@@ -156,6 +156,21 @@ fi
 echo "[doghouse] Configuring git safe.directory"
 gosu scrappy git config --global --add safe.directory '*'
 
+# Install bundled skills into state dir on boot
+# (Skills live in $OPENCLAW_STATE_DIR/skills, not in the workspace.)
+if [[ -d /opt/doghouse-skills ]]; then
+  mkdir -p "$STATE_DIR/skills"
+  for d in /opt/doghouse-skills/*; do
+    [[ -d "$d" ]] || continue
+    name="$(basename "$d")"
+    if [[ ! -d "$STATE_DIR/skills/$name" ]]; then
+      echo "[doghouse] Installing bundled skill: $name"
+      cp -a "$d" "$STATE_DIR/skills/$name" || true
+      chown -R scrappy:scrappy "$STATE_DIR/skills/$name" 2>/dev/null || true
+    fi
+  done
+fi
+
 # AUTO-LOGIN GH CLI IF TOKEN PRESENT
 if [[ -f /run/secrets/gh_token ]]; then
   echo "[doghouse] Loading GH token..."

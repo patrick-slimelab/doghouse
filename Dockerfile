@@ -73,6 +73,9 @@ RUN ln -sf /opt/openclaw /home/scrappy/openclaw \
  && chmod +x /opt/openclaw/dist/entry.js \
  && chmod +x /home/scrappy/openclaw/dist/entry.js
 
+# Bundle doghouse skills into the image (copied into $OPENCLAW_STATE_DIR/skills on boot)
+COPY skills/ /opt/doghouse-skills/
+
 # Copy built indexer
 COPY --from=dotnet-builder /out/discord-indexer/discord-indexer /usr/local/bin/discord-indexer
 RUN chmod +x /usr/local/bin/discord-indexer
