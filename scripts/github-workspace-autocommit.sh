@@ -1,54 +1,49 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Periodically mirror LIVE workspace -> repo ./workspace and commit/push changes.
+# Periodically commit/push changes in the LIVE workspace repo.
 #
-# Intended to run in background inside the container as the dog user.
+# This repo is the dog's private workspace repo (LIVE_WORKSPACE is a git checkout).
+# We commit a conservative set of paths by default (identity + tools + skills),
+# so the dog can't accidentally rewrite the whole prompt stack without you noticing.
 
 OWNER="${DOGHOUSE_GITHUB_OWNER:-cyberscoob}"
 REPO_NAME="${DOGHOUSE_WORKSPACE_REPO:-openclaw-workspace}"
 BRANCH="${DOGHOUSE_WORKSPACE_BRANCH:-main}"
 
 LIVE_WORKSPACE="${DOGHOUSE_WORKSPACE:?DOGHOUSE_WORKSPACE must be set}"
-REPO_DIR="${DOGHOUSE_WORKSPACE_REPO_DIR:-/home/scoob/.openclaw/workspace-repo}"
-
 INTERVAL_SECONDS="${DOGHOUSE_WORKSPACE_AUTOCOMMIT_SECONDS:-300}"
 
-log() { echo "[github-workspace-autocommit] $*"; }
+# Space-separated pathspecs relative to workspace root.
+# Override if you want to track more/less.
+PATHS_RAW="${DOGHOUSE_WORKSPACE_AUTOCOMMIT_PATHS:-IDENTITY.md TOOLS.md skills}"
 
+log() { echo "[github-workspace-autocommit] $*"; }
 need() { command -v "$1" >/dev/null 2>&1 || { echo "missing $1" >&2; exit 1; }; }
 need git
-need rsync
 
-if [[ ! -d "$REPO_DIR/.git" ]]; then
-  log "Repo not present at $REPO_DIR; skipping autocommit"
+if [[ ! -d "$LIVE_WORKSPACE/.git" ]]; then
+  log "Live workspace is not a git repo at $LIVE_WORKSPACE; skipping autocommit"
   exit 0
 fi
+
+# Convert PATHS_RAW into an array safely
+read -r -a PATHS <<< "$PATHS_RAW"
 
 while true; do
   sleep "$INTERVAL_SECONDS"
 
-  pushd "$REPO_DIR" >/dev/null || continue
+  pushd "$LIVE_WORKSPACE" >/dev/null || continue
 
-  # Only operate if ./workspace exists
-  if [[ ! -d workspace ]]; then
-    popd >/dev/null
-    continue
-  fi
-
-  # Ensure branch checked out
   git checkout -q "$BRANCH" 2>/dev/null || true
 
-  # Mirror live workspace into repo workspace (exclude memory)
-  rsync -a --delete --exclude 'memory/' --exclude 'MEMORY.md' "$LIVE_WORKSPACE/" "workspace/" || true
-
-  # If no changes under workspace/, do nothing
-  if [[ -z "$(git status --porcelain -- workspace)" ]]; then
+  # See if any tracked paths changed
+  if [[ -z "$(git status --porcelain -- "${PATHS[@]}" 2>/dev/null || true)" ]]; then
     popd >/dev/null
     continue
   fi
 
-  git add -A workspace
+  git add -A -- "${PATHS[@]}" || true
 
   msg="workspace: autosync $(date -Is)"
   git commit -m "$msg" >/dev/null 2>&1 || true
