@@ -1,0 +1,16 @@
+# syntax=docker/dockerfile:1
+
+# Build from local openclaw source instead of git
+FROM node:22-bookworm AS builder
+
+# Copy local openclaw source
+COPY --chown=node:node /home/patrick/openclaw /opt/openclaw
+
+WORKDIR /opt/openclaw
+RUN corepack enable \
+ && pnpm install --frozen-lockfile \
+ && pnpm build \
+ && node ./openclaw.mjs plugins install @openclaw/matrix || true
+
+# Rest is same as original Dockerfile...
+# (Copy from original Dockerfile stages 2 and 3)
