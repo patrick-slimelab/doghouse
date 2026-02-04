@@ -1,7 +1,7 @@
 services:
   doghouse-init:
     image: alpine:3.19
-    container_name: doghouse-init
+    container_name: ${BOT_CANONICAL_NAME:-scoob}-doghouse-init
     restart: "no"
     command:
       - sh
@@ -26,7 +26,7 @@ services:
 
   mongo:
     image: mongo:6
-    container_name: doghouse-mongo
+    container_name: ${BOT_CANONICAL_NAME:-scoob}-doghouse-mongo
     restart: unless-stopped
     volumes:
       - doghouse_mongo:/data/db
@@ -38,7 +38,7 @@ services:
         MOLTBOT_REPO: https://github.com/patrick-slimelab/openclaw.git
         # Pin to specific commit with ollama discovery fix
         MOLTBOT_REF: main
-    container_name: doghouse
+    container_name: ${BOT_CANONICAL_NAME:-scoob}-doghouse
     restart: unless-stopped
     depends_on:
       doghouse-init:

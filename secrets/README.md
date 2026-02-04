@@ -1,16 +1,16 @@
-Put secret files here (NOT committed).
+# secrets/
 
-Expected files (examples):
-- `discord_bot_token` (Discord bot token)
-- `matrix_homeserver` (e.g. `https://matrix.example.org`)
-- `matrix_user_id` (e.g. `@scoob:example.org`)
-- `matrix_password` (Matrix account password)
-- `gateway_token` (Moltbot Gateway auth token; generate a long random string)
+This folder is ignored by git (except this README).
 
-Create with:
-```bash
-mkdir -p secrets
-chmod 700 secrets
-printf "%s" "<token>" > secrets/discord_bot_token
-chmod 600 secrets/discord_bot_token
-```
+## Required/expected files
+
+- `github.env`      (env_file for docker compose)
+- `gh_token`        (docker secret used inside container)
+- `bot_canonical_name`  (single line: the bot's canonical name, e.g. `scoob` or `scrappy`)
+
+`bot_canonical_name` is used to set stable Docker `container_name` values like:
+- `<name>-doghouse`
+- `<name>-doghouse-init`
+- `<name>-doghouse-mongo`
+
+This makes it easy to target the right containers from host scripts.
