@@ -66,8 +66,29 @@ else
   log "Seeded $OWNER/$REPO_NAME from $UPSTREAM_URL"
 fi
 
+# Ensure gh configures git credential helper (so `git push` works with GH_TOKEN-backed auth)
+# Best-effort; ok if it fails.
+(gh auth setup-git -h "${GH_HOST:-github.com}" >/dev/null 2>&1) || true
+
 # Make LIVE_WORKSPACE a git checkout of the private repo.
 # If it's not a git repo, back it up and clone into place.
+# If it *is* a git repo but not the expected repo, move it aside and clone fresh.
+expected_origin_a="https://github.com/$OWNER/$REPO_NAME.git"
+expected_origin_b="git@github.com:$OWNER/$REPO_NAME.git"
+
+if [[ -d "$LIVE_WORKSPACE/.git" ]]; then
+  pushd "$LIVE_WORKSPACE" >/dev/null
+  current_origin="$(git remote get-url origin 2>/dev/null || true)"
+  popd >/dev/null
+
+  if [[ -n "$current_origin" ]] && [[ "$current_origin" != "$expected_origin_a" ]] && [[ "$current_origin" != "$expected_origin_b" ]]; then
+    ts="$(date +%Y%m%d-%H%M%S)"
+    backup="${LIVE_WORKSPACE%/}.legacy.$ts"
+    log "WARN: $LIVE_WORKSPACE is a git repo but origin=$current_origin (expected $expected_origin_a). Moving aside -> $backup"
+    mv "$LIVE_WORKSPACE" "$backup" || true
+  fi
+fi
+
 if [[ ! -d "$LIVE_WORKSPACE/.git" ]]; then
   if [[ -d "$LIVE_WORKSPACE" ]] && [[ -n "$(ls -A "$LIVE_WORKSPACE" 2>/dev/null || true)" ]]; then
     ts="$(date +%Y%m%d-%H%M%S)"
@@ -77,7 +98,7 @@ if [[ ! -d "$LIVE_WORKSPACE/.git" ]]; then
   fi
   mkdir -p "$(dirname "$LIVE_WORKSPACE")"
   log "Cloning private workspace repo into live workspace: $LIVE_WORKSPACE"
-  git clone --quiet "https://github.com/$OWNER/$REPO_NAME.git" "$LIVE_WORKSPACE"
+  git clone --quiet "$expected_origin_a" "$LIVE_WORKSPACE"
 fi
 
 pushd "$LIVE_WORKSPACE" >/dev/null
