@@ -51,7 +51,7 @@ services:
       - "host.docker.internal:host-gateway"
 
     environment:
-      FORCE_DEFAULT_MODEL_OLLAMA: ollama/glm-4.7-flash
+      FORCE_DEFAULT_MODEL_OLLAMA: ollama/frob/qwen3-coder-next:80b-a3b-q4_K_M
       # Point Scoob's OpenAI-compatible client to the host ooba server
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-http://host.docker.internal:5000}
 
