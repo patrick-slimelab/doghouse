@@ -108,7 +108,9 @@ fi
 echo "[deploy] BOT_CANONICAL_NAME=$CANONICAL_NAME docker compose ${compose_args[*]}"
 BOT_CANONICAL_NAME="$CANONICAL_NAME" docker compose "${compose_args[@]}"
 
-echo "[deploy] Containers (filtered):"
-docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}' | (head -n 1; rg -n "^${CANONICAL_NAME}-doghouse(\s|$)|^${CANONICAL_NAME}-doghouse-mongo(\s|$)|^${CANONICAL_NAME}-doghouse-init(\s|$)" || true)
+echo "[deploy] Containers:"
+docker ps --filter "name=^${CANONICAL_NAME}-doghouse$" --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}' || true
+docker ps --filter "name=^${CANONICAL_NAME}-doghouse-mongo$" --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}' || true
+docker ps --filter "name=^${CANONICAL_NAME}-doghouse-init$" --format 'table {{.Names}}\t{{.Status}}\t{{.Image}}' || true
 
 echo "[deploy] done"
