@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-# Build Moltbot in a dedicated stage
+# --- Stage 1: Build OpenClaw ---
 FROM node:22-bookworm AS builder
 
 ARG MOLTBOT_REPO
@@ -11,21 +11,20 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /opt
-RUN git clone ${MOLTBOT_REPO} moltbot \
- && cd moltbot \
+RUN git clone ${MOLTBOT_REPO} openclaw \
+ && cd openclaw \
  && git checkout ${MOLTBOT_REF}
 
-WORKDIR /opt/moltbot
+WORKDIR /opt/openclaw
 RUN corepack enable \
  && pnpm install --frozen-lockfile \
- && pnpm build \
- && node ./moltbot.mjs plugins install @moltbot/matrix || true
+ && pnpm build
 
 
-# Runtime image
+# --- Stage 2: Runtime image ---
 FROM node:22-bookworm
 
-# Minimal deps for runtime + entrypoint privilege drop + sudo + curl/jq (for model probing) + sshd
+# Minimal deps for runtime + entrypoint privilege drop + sudo + curl/jq + sshd
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates tini gosu sudo curl jq openssh-server \
  && rm -rf /var/lib/apt/lists/*
@@ -44,20 +43,22 @@ RUN mkdir /var/run/sshd \
  && echo 'AllowUsers scoob' >> /etc/ssh/sshd_config \
  && echo 'AuthorizedKeysFile /tmp/ssh/%u' >> /etc/ssh/sshd_config
 
-# Copy built repo (including node_modules) with correct ownership in one shot.
-# This avoids a slow recursive chown during build.
+# Copy built OpenClaw to /opt (avoid putting it under /home/scoob because volumes can shadow it)
 WORKDIR /home/scoob
-COPY --from=builder --chown=scoob:scoob /opt/moltbot /home/scoob/moltbot
+COPY --from=builder /opt/openclaw /opt/openclaw
+RUN chmod +x /opt/openclaw/dist/entry.js
 
-# Expose CLI on PATH (so `moltbot` / `clawdbot` work inside the container)
-RUN ln -sf /home/scoob/moltbot/moltbot.mjs /usr/local/bin/moltbot \
- && ln -sf /home/scoob/moltbot/moltbot.mjs /usr/local/bin/clawdbot
+# Expose CLI on PATH
+# NOTE: "moltbot" is deprecated; keep it as a compatibility alias.
+RUN ln -sf /opt/openclaw/dist/entry.js /usr/local/bin/openclaw \
+ && ln -sf /opt/openclaw/dist/entry.js /usr/local/bin/moltbot \
+ && ln -sf /opt/openclaw/dist/entry.js /usr/local/bin/clawdbot
 
 ENV HOME=/home/scoob
 
 COPY entrypoint.sh /usr/local/bin/doghouse-entrypoint
 RUN chmod +x /usr/local/bin/doghouse-entrypoint
 
-# Run entrypoint as root so it can fix volume ownership, then drop to node.
+# Run entrypoint as root so it can fix volume ownership, then drop to scoob.
 ENTRYPOINT ["/usr/bin/tini","--","/usr/local/bin/doghouse-entrypoint"]
-CMD ["node","/home/scoob/moltbot/moltbot.mjs","gateway","run","--bind","loopback","--allow-unconfigured"]
+CMD ["openclaw","gateway","run","--port","4000","--allow-unconfigured"]
