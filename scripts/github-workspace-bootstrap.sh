@@ -1,14 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Bootstrap a per-dog PRIVATE workspace repo and make it the live OpenClaw workspace.
+# Bootstrap a per-dog PRIVATE workspace repo and sync it into the live OpenClaw workspace.
+#
+# IMPORTANT: LIVE_WORKSPACE (e.g. /home/scoob) is NOT a git repo.
+# We keep the git checkout separately (REPO_DIR), and symlink root workspace files
+# (AGENTS.md, SOUL.md, etc.) from REPO_DIR/workspace/* into LIVE_WORKSPACE.
 #
 # Policy: rebase-based (clean stack of dog commits on top of a model baseline)
-# - Keep a private repo under the dog's account (cannot be a private fork)
-# - Add slimelab baseline as `upstream`
-# - Rebase dog's branch onto upstream baseline branch
-# - Force-push with lease
-# - Ensure the LIVE workspace directory is a git checkout of the private repo
 
 OWNER="${DOGHOUSE_GITHUB_OWNER:-cyberscoob}"
 REPO_NAME="${DOGHOUSE_WORKSPACE_REPO:-openclaw-workspace}"
@@ -18,10 +17,10 @@ UPSTREAM_URL="${DOGHOUSE_WORKSPACE_UPSTREAM_URL:-https://github.com/slimelab-ai/
 BRANCH="${DOGHOUSE_WORKSPACE_BRANCH:-main}"
 
 # The baseline branch to rebase onto, in the slimelab upstream repo.
-# Examples: model/qwen3-coder-next-80b-a3b-f16, model/gpt-oss-20b
 BASELINE_BRANCH="${DOGHOUSE_WORKSPACE_BASELINE_BRANCH:-main}"
 
 LIVE_WORKSPACE="${DOGHOUSE_WORKSPACE:?DOGHOUSE_WORKSPACE must be set}"
+REPO_DIR="${DOGHOUSE_WORKSPACE_REPO_DIR:-/home/scoob/.openclaw/workspace-repo}"
 
 log() { echo "[github-workspace] $*"; }
 need() { command -v "$1" >/dev/null 2>&1 || { echo "[github-workspace] ERROR: missing $1" >&2; exit 1; }; }
@@ -49,7 +48,6 @@ else
   log "Creating private repo: $OWNER/$REPO_NAME"
   gh repo create "$OWNER/$REPO_NAME" --private --confirm >/dev/null
 
-  # Seed from upstream by mirroring refs
   tmp="$(mktemp -d)"
   trap 'rm -rf "$tmp"' EXIT
 
@@ -58,50 +56,24 @@ else
 
   origin_https="https://github.com/$OWNER/$REPO_NAME.git"
   git remote set-url origin "$origin_https"
-
   git push --quiet origin --all
   git push --quiet origin --tags
-  popd >/dev/null
 
+  popd >/dev/null
   log "Seeded $OWNER/$REPO_NAME from $UPSTREAM_URL"
 fi
 
-# Ensure gh configures git credential helper (so `git push` works with GH_TOKEN-backed auth)
-# Best-effort; ok if it fails.
+# Ensure gh configures git credential helper (so `git push` works)
 (gh auth setup-git -h "${GH_HOST:-github.com}" >/dev/null 2>&1) || true
 
-# Make LIVE_WORKSPACE a git checkout of the private repo.
-# If it's not a git repo, back it up and clone into place.
-# If it *is* a git repo but not the expected repo, move it aside and clone fresh.
-expected_origin_a="https://github.com/$OWNER/$REPO_NAME.git"
-expected_origin_b="git@github.com:$OWNER/$REPO_NAME.git"
-
-if [[ -d "$LIVE_WORKSPACE/.git" ]]; then
-  pushd "$LIVE_WORKSPACE" >/dev/null
-  current_origin="$(git remote get-url origin 2>/dev/null || true)"
-  popd >/dev/null
-
-  if [[ -n "$current_origin" ]] && [[ "$current_origin" != "$expected_origin_a" ]] && [[ "$current_origin" != "$expected_origin_b" ]]; then
-    ts="$(date +%Y%m%d-%H%M%S)"
-    backup="${LIVE_WORKSPACE%/}.legacy.$ts"
-    log "WARN: $LIVE_WORKSPACE is a git repo but origin=$current_origin (expected $expected_origin_a). Moving aside -> $backup"
-    mv "$LIVE_WORKSPACE" "$backup" || true
-  fi
+# Clone/update local repo checkout
+mkdir -p "$(dirname "$REPO_DIR")"
+if [[ ! -d "$REPO_DIR/.git" ]]; then
+  log "Cloning private workspace repo -> $REPO_DIR"
+  git clone --quiet "https://github.com/$OWNER/$REPO_NAME.git" "$REPO_DIR"
 fi
 
-if [[ ! -d "$LIVE_WORKSPACE/.git" ]]; then
-  if [[ -d "$LIVE_WORKSPACE" ]] && [[ -n "$(ls -A "$LIVE_WORKSPACE" 2>/dev/null || true)" ]]; then
-    ts="$(date +%Y%m%d-%H%M%S)"
-    backup="${LIVE_WORKSPACE%/}.bak.$ts"
-    log "Backing up existing workspace -> $backup"
-    mv "$LIVE_WORKSPACE" "$backup" || true
-  fi
-  mkdir -p "$(dirname "$LIVE_WORKSPACE")"
-  log "Cloning private workspace repo into live workspace: $LIVE_WORKSPACE"
-  git clone --quiet "$expected_origin_a" "$LIVE_WORKSPACE"
-fi
-
-pushd "$LIVE_WORKSPACE" >/dev/null
+pushd "$REPO_DIR" >/dev/null
 
 # Remotes
 if git remote get-url origin >/dev/null 2>&1; then
@@ -121,7 +93,7 @@ git fetch --quiet origin || true
 log "Fetching upstream baseline: $BASELINE_BRANCH"
 git fetch --quiet upstream "$BASELINE_BRANCH" || true
 
-# Preserve whatever currently exists (in case this directory was previously used for something else)
+# Backup current head (just in case)
 current_head="$(git rev-parse HEAD 2>/dev/null || true)"
 if [[ -n "$current_head" ]]; then
   ts="$(date +%Y%m%d-%H%M%S)"
@@ -129,9 +101,6 @@ if [[ -n "$current_head" ]]; then
 fi
 
 # Force the working branch to exist and be checked out.
-# If origin has the branch, base on that.
-# Else, base on upstream baseline.
-# Else, create an empty branch.
 if git show-ref --verify --quiet "refs/remotes/origin/$BRANCH"; then
   log "Checking out $BRANCH from origin/$BRANCH"
   git checkout -q -B "$BRANCH" "origin/$BRANCH"
@@ -157,41 +126,36 @@ fi
 
 # Push rewritten/updated branch
 log "Pushing $BRANCH to origin (force-with-lease)"
-git push --force-with-lease origin "$BRANCH" || true
+git push --force-with-lease origin "$BRANCH" >/dev/null 2>&1 || true
 
-# If the repo uses the "workspace/" layout (as in slimelab-ai/openclaw-workspace),
-# ensure the workspace root files OpenClaw reads are present as symlinks.
-# This makes ~/AGENTS.md effectively equal to repo workspace/AGENTS.md.
+# Symlink workspace files into LIVE_WORKSPACE
+mkdir -p "$LIVE_WORKSPACE"
+
 if [[ -d workspace ]]; then
-  log "Ensuring root workspace files are symlinks -> workspace/*"
+  log "Ensuring LIVE_WORKSPACE root files are symlinks -> $REPO_DIR/workspace/*"
 
   for f in AGENTS.md SOUL.md TOOLS.md IDENTITY.md USER.md HEARTBEAT.md BOOTSTRAP.md; do
     if [[ -f "workspace/$f" ]]; then
-      # If a real file exists at root, move it aside once.
-      if [[ -e "$f" && ! -L "$f" ]]; then
+      if [[ -e "$LIVE_WORKSPACE/$f" && ! -L "$LIVE_WORKSPACE/$f" ]]; then
         ts="$(date +%Y%m%d-%H%M%S)"
-        mv -f "$f" "$f.legacy.$ts" || true
+        mv -f "$LIVE_WORKSPACE/$f" "$LIVE_WORKSPACE/$f.legacy.$ts" || true
       fi
-      ln -sfn "workspace/$f" "$f"
+      ln -sfn "$REPO_DIR/workspace/$f" "$LIVE_WORKSPACE/$f"
     fi
   done
 
-  # Skills: prefer tracking under workspace/skills and symlink root skills -> workspace/skills
+  # skills
   if [[ -d workspace/skills ]]; then
-    if [[ -e skills && ! -L skills ]]; then
+    if [[ -e "$LIVE_WORKSPACE/skills" && ! -L "$LIVE_WORKSPACE/skills" ]]; then
       ts="$(date +%Y%m%d-%H%M%S)"
-      mv -f skills "skills.legacy.$ts" || true
+      mv -f "$LIVE_WORKSPACE/skills" "$LIVE_WORKSPACE/skills.legacy.$ts" || true
     fi
-    ln -sfn workspace/skills skills
+    ln -sfn "$REPO_DIR/workspace/skills" "$LIVE_WORKSPACE/skills"
   fi
+else
+  log "WARN: repo has no ./workspace directory; cannot link root workspace files"
 fi
 
-log "OK: live workspace is git-backed at $LIVE_WORKSPACE"
-
-git remote -v | sed 's/^/[github-workspace] /'
-
-git rev-parse --abbrev-ref HEAD | sed 's/^/[github-workspace] branch: /'
-
-git rev-parse HEAD | sed 's/^/[github-workspace] head: /'
+log "OK: repo checkout at $REPO_DIR; live workspace at $LIVE_WORKSPACE"
 
 popd >/dev/null
