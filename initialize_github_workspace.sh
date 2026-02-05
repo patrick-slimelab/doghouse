@@ -5,7 +5,7 @@ set -euo pipefail
 #
 # Purpose:
 #   Create a PRIVATE repo under the cyberscoob GitHub account named "openclaw-workspace"
-#   (private repos cannot be forks), seed it from slimelab-ai/openclaw-workspace,
+#   (private repos cannot be forks), seed it from slimelab-ai/openclaw,
 #   and configure remotes so slimelab stays as "upstream".
 #
 # Runs from the HOST and execs into the running doghouse container.
@@ -25,7 +25,7 @@ set -euo pipefail
 CONTAINER="${CONTAINER:-doghouse}"
 GITHUB_OWNER="${GITHUB_OWNER:-cyberscoob}"
 REPO_NAME="${REPO_NAME:-openclaw-workspace}"
-UPSTREAM_URL="${UPSTREAM_URL:-https://github.com/slimelab-ai/openclaw-workspace.git}"
+UPSTREAM_URL="${UPSTREAM_URL:-https://github.com/slimelab-ai/openclaw.git}"
 
 set -x
 

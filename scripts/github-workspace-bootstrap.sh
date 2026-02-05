@@ -11,7 +11,7 @@ set -euo pipefail
 
 OWNER="${DOGHOUSE_GITHUB_OWNER:-cyberscoob}"
 REPO_NAME="${DOGHOUSE_WORKSPACE_REPO:-openclaw-workspace}"
-UPSTREAM_URL="${DOGHOUSE_WORKSPACE_UPSTREAM_URL:-https://github.com/slimelab-ai/openclaw-workspace.git}"
+UPSTREAM_URL="${DOGHOUSE_WORKSPACE_UPSTREAM_URL:-https://github.com/slimelab-ai/openclaw.git}"
 
 # The dog's working branch in the private repo.
 BRANCH="${DOGHOUSE_WORKSPACE_BRANCH:-main}"
