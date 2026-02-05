@@ -187,7 +187,9 @@ fi
 # Bootstrap the private workspace repo (best-effort). This makes $WORKSPACE_DIR a git-backed checkout.
 if [[ -x /opt/doghouse/scripts/github-workspace-bootstrap.sh ]]; then
   echo "[doghouse] Bootstrapping GitHub workspace repo (rebase policy) -> $WORKSPACE_DIR"
-  gosu scoob env DOGHOUSE_WORKSPACE="$WORKSPACE_DIR" bash -lc '/opt/doghouse/scripts/github-workspace-bootstrap.sh' || true
+  # Log bootstrap output for debugging
+  gosu scoob env DOGHOUSE_WORKSPACE="$WORKSPACE_DIR" bash -lc '/opt/doghouse/scripts/github-workspace-bootstrap.sh' > /tmp/github-workspace-bootstrap.log 2>&1 || true
+  echo "[doghouse] Workspace bootstrap log: /tmp/github-workspace-bootstrap.log"
 
   # Link + bootstrap memory repo (separate private repo) and start autosync
   if [[ -x /opt/doghouse/scripts/github-memory-bootstrap.sh ]]; then
