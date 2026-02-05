@@ -159,6 +159,33 @@ fi
 log "Pushing $BRANCH to origin (force-with-lease)"
 git push --force-with-lease origin "$BRANCH" || true
 
+# If the repo uses the "workspace/" layout (as in slimelab-ai/openclaw-workspace),
+# ensure the workspace root files OpenClaw reads are present as symlinks.
+# This makes ~/AGENTS.md effectively equal to repo workspace/AGENTS.md.
+if [[ -d workspace ]]; then
+  log "Ensuring root workspace files are symlinks -> workspace/*"
+
+  for f in AGENTS.md SOUL.md TOOLS.md IDENTITY.md USER.md HEARTBEAT.md BOOTSTRAP.md; do
+    if [[ -f "workspace/$f" ]]; then
+      # If a real file exists at root, move it aside once.
+      if [[ -e "$f" && ! -L "$f" ]]; then
+        ts="$(date +%Y%m%d-%H%M%S)"
+        mv -f "$f" "$f.legacy.$ts" || true
+      fi
+      ln -sfn "workspace/$f" "$f"
+    fi
+  done
+
+  # Skills: prefer tracking under workspace/skills and symlink root skills -> workspace/skills
+  if [[ -d workspace/skills ]]; then
+    if [[ -e skills && ! -L skills ]]; then
+      ts="$(date +%Y%m%d-%H%M%S)"
+      mv -f skills "skills.legacy.$ts" || true
+    fi
+    ln -sfn workspace/skills skills
+  fi
+fi
+
 log "OK: live workspace is git-backed at $LIVE_WORKSPACE"
 
 git remote -v | sed 's/^/[github-workspace] /'
