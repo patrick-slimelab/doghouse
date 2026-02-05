@@ -5,13 +5,16 @@ FROM node:22-bookworm AS builder
 
 ARG MOLTBOT_REPO
 ARG MOLTBOT_REF
+ARG MOLTBOT_CACHE_BUST
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends git ca-certificates openssh-client \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /opt
-RUN git clone ${MOLTBOT_REPO} openclaw \
+# Cache bust to force pulling latest branch head when building from a moving ref.
+RUN echo "MOLTBOT_CACHE_BUST=${MOLTBOT_CACHE_BUST:-0}" \
+ && git clone ${MOLTBOT_REPO} openclaw \
  && cd openclaw \
  && git checkout ${MOLTBOT_REF}
 

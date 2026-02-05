@@ -37,9 +37,11 @@ services:
     build:
       context: .
       args:
-        MOLTBOT_REPO: https://github.com/patrick-slimelab/openclaw.git
-        # Pin to specific commit with ollama discovery fix
-        MOLTBOT_REF: main
+        MOLTBOT_REPO: https://github.com/slimelab-ai/openclaw.git
+        # Build from the Qwen source-of-truth branch
+        MOLTBOT_REF: model/qwen3-coder-next
+        # Cache-bust so docker build pulls latest branch head when redeploying
+        MOLTBOT_CACHE_BUST: ${MOLTBOT_CACHE_BUST:-0}
     container_name: ${BOT_CANONICAL_NAME:-scoob}-doghouse
     restart: unless-stopped
     depends_on:

@@ -103,6 +103,8 @@ fi
 compose_args=(up -d --force-recreate --remove-orphans)
 if [[ "$REBUILD" == "1" ]]; then
   compose_args+=(--build)
+  # Cache bust to force Docker to pull the latest head when building from a moving git ref.
+  export MOLTBOT_CACHE_BUST="$(date +%s)"
 fi
 
 echo "[deploy] BOT_CANONICAL_NAME=$CANONICAL_NAME docker compose ${compose_args[*]}"
