@@ -160,6 +160,22 @@ if [[ -f /run/secrets/id_ed25519 ]]; then
   chown scoob:scoob /home/scoob/.ssh/known_hosts
 fi
 
+# --- Matrix Indexer (Restored from persistent volume) ---
+if [[ -f /home/scoob/matrix-indexer/bin/matrix-indexer ]]; then
+  echo "[doghouse] Setting up Matrix Indexer..."
+  ln -sf /home/scoob/matrix-indexer/bin/matrix-indexer /usr/local/bin/matrix-indexer
+  ln -sf /home/scoob/matrix-indexer/bin/matrix-indexer-search /usr/local/bin/matrix-indexer-search
+  chmod +x /usr/local/bin/matrix-indexer /usr/local/bin/matrix-indexer-search
+
+  if [[ -n "${MATRIX_HOMESERVER:-}" ]]; then
+    echo "[doghouse] Starting Matrix Indexer service..."
+    export MONGODB_URI="${MONGODB_URI:-mongodb://mongo:27017}"
+    mkdir -p /var/log/matrix-indexer
+    chown scoob:scoob /var/log/matrix-indexer
+    gosu scoob nohup /usr/local/bin/matrix-indexer > /var/log/matrix-indexer/matrix-indexer.log 2>&1 &
+  fi
+fi
+
 # Configure git to trust all directories (prevents "dubious ownership" errors)
 echo "[doghouse] Configuring git safe.directory"
 gosu scoob git config --global --add safe.directory '*'
