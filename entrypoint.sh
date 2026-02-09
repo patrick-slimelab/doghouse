@@ -180,6 +180,12 @@ fi
 echo "[doghouse] Configuring git safe.directory"
 gosu scoob git config --global --add safe.directory '*'
 
+# Symlink docs to home (workaround for path resolution issue in OpenPaw rebrand)
+if [[ -d /opt/openclaw/docs ]] && [[ ! -e /home/scoob/docs ]]; then
+  echo "[doghouse] Symlinking docs to /home/scoob/docs..."
+  ln -sf /opt/openclaw/docs /home/scoob/docs
+fi
+
 # --- GitHub CLI auth + workspace repo bootstrap ---
 # Prefer GH_TOKEN from docker secret (and/or env_file) for non-interactive auth.
 if [[ -f /run/secrets/gh_token ]]; then
