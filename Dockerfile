@@ -18,6 +18,10 @@ RUN echo "MOLTBOT_CACHE_BUST=${MOLTBOT_CACHE_BUST:-0}" \
  && cd openclaw \
  && git checkout ${MOLTBOT_REF}
 
+# Apply rebrand patch (if present)
+COPY openpaw-rebrand.patch /tmp/openpaw-rebrand.patch
+RUN cd openclaw && git apply /tmp/openpaw-rebrand.patch || echo "Patch failed or already applied, skipping..."
+
 WORKDIR /opt/openclaw
 RUN corepack enable \
  && pnpm install --frozen-lockfile \
@@ -61,6 +65,7 @@ RUN chmod +x /opt/openclaw/dist/entry.js
 # Expose CLI on PATH
 # NOTE: "moltbot" is deprecated; keep it as a compatibility alias.
 RUN ln -sf /opt/openclaw/dist/entry.js /usr/local/bin/openclaw \
+ && ln -sf /opt/openclaw/dist/entry.js /usr/local/bin/openpaw \
  && ln -sf /opt/openclaw/dist/entry.js /usr/local/bin/moltbot \
  && ln -sf /opt/openclaw/dist/entry.js /usr/local/bin/clawdbot
 
