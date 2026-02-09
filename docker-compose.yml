@@ -37,7 +37,7 @@ services:
     build:
       context: .
       args:
-        MOLTBOT_REPO: https://github.com/slimelab-ai/openclaw.git
+        MOLTBOT_REPO: https://github.com/slimelab-ai/openpaw.git
         # Build from the Qwen source-of-truth branch
         MOLTBOT_REF: model/qwen3-coder-next
         # Cache-bust so docker build pulls latest branch head when redeploying

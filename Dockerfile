@@ -18,10 +18,6 @@ RUN echo "MOLTBOT_CACHE_BUST=${MOLTBOT_CACHE_BUST:-0}" \
  && cd openclaw \
  && git checkout ${MOLTBOT_REF}
 
-# Apply rebrand patch (if present)
-COPY openpaw-rebrand.patch /tmp/openpaw-rebrand.patch
-RUN cd openclaw && git apply /tmp/openpaw-rebrand.patch || echo "Patch failed or already applied, skipping..."
-
 WORKDIR /opt/openclaw
 RUN corepack enable \
  && pnpm install --frozen-lockfile \
