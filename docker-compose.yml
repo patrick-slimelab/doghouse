@@ -59,7 +59,7 @@ services:
       - ./secrets/github.env
 
     environment:
-      FORCE_DEFAULT_MODEL_OLLAMA: ollama/frob/qwen3-coder-next:80b-a3b-f16
+      FORCE_DEFAULT_MODEL_OLLAMA: ollama/frob/qwen3-coder-next:80b-a3b-q8_0
       # Git-backed workspace: rebase Scoob's private workspace branch onto this baseline branch
       DOGHOUSE_WORKSPACE_BASELINE_BRANCH: model/qwen3-coder-next
       # Force dog workspace branch (do NOT leave repo on legacy 'master')

@@ -202,6 +202,28 @@ if [[ -x /opt/doghouse/scripts/github-workspace-bootstrap.sh ]]; then
     fi
   fi
 
+  # Seed workspace defaults (IDENTITY, SOUL, USER) if they're still empty/template.
+  # These live in /opt/doghouse/workspace-defaults/ and only overwrite if the target
+  # is missing or still contains the generic template placeholder.
+  REPO_WORKSPACE="${DOGHOUSE_WORKSPACE_REPO_DIR:-/home/scoob/.openclaw/workspace-repo}/workspace"
+  DEFAULTS_DIR="/opt/doghouse/workspace-defaults"
+  if [[ -d "$DEFAULTS_DIR" ]] && [[ -d "$REPO_WORKSPACE" ]]; then
+    echo "[doghouse] Seeding workspace defaults (if needed)"
+    for f in "$DEFAULTS_DIR"/*.md; do
+      fname="$(basename "$f")"
+      target="$REPO_WORKSPACE/$fname"
+      if [[ ! -f "$target" ]] || grep -q '^\*Fill this in during your first conversation' "$target" 2>/dev/null || grep -q '^\*Learn about the person' "$target" 2>/dev/null || [[ ! -s "$target" ]]; then
+        cp "$f" "$target"
+        chown scoob:scoob "$target"
+        echo "[doghouse]   Seeded $fname"
+      fi
+    done
+    # Remove BOOTSTRAP.md if identity is seeded (dog is already bootstrapped)
+    if [[ -f "$REPO_WORKSPACE/IDENTITY.md" ]] && grep -q 'Name: Scoob' "$REPO_WORKSPACE/IDENTITY.md" 2>/dev/null; then
+      rm -f "$REPO_WORKSPACE/BOOTSTRAP.md" "$WORKSPACE_DIR/BOOTSTRAP.md"
+    fi
+  fi
+
   # Start background autosync commits for workspace
   if [[ -x /opt/doghouse/scripts/github-workspace-autocommit.sh ]]; then
     echo "[doghouse] Starting workspace autosync commits"
