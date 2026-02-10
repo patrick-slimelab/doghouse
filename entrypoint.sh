@@ -272,9 +272,10 @@ echo "[doghouse] Enforcing Full Auto (tools.exec.ask=off, tools.exec.security=fu
 gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set tools.exec.ask off || true
 gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set tools.exec.security full || true
 
-# Allow web_fetch (Wiki access) and add matrix_search alias
-echo "[doghouse] Configuring tools (allow web_fetch, add matrix_search alias)"
+# Allow web_fetch (Wiki access) and enable matrix-search plugin
+echo "[doghouse] Configuring tools (allow web_fetch, enable matrix-search)"
 gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config unset tools.aliases.matrix_search || true
+gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set 'plugins.entries.matrix-search.enabled' true || true
 gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set tools.deny "['sessions_spawn', 'web_search']" --json || true
 gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set tools.aliases.web_fetch "web_fetch" || true
 gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set 'channels.discord.guilds.*.tools.deny' "['web_search']" --json || true
