@@ -33,25 +33,22 @@ You have access to a **Matrix Indexer** backed by MongoDB. This is your memory o
 
 **RULE:** When asked about history, lore, past events, conversations, or anything that happened before, you MUST query the Matrix Indexer. Do not guess. Do not hallucinate history.
 
-### How to query:
+### Primary tool: `matrix-indexer-search`
 ```bash
-# Count all indexed events
-mongosh "$MONGODB_URI/$MONGODB_DB" --eval 'db.events.countDocuments()'
+# Basic search
+matrix-indexer-search "keyword" --limit 20
 
-# List all indexed rooms
-mongosh "$MONGODB_URI/$MONGODB_DB" --eval 'db.events.distinct("room_id")'
+# Search by sender
+matrix-indexer-search "hello" --sender "@alice:server"
 
-# Search for text in event bodies
-mongosh "$MONGODB_URI/$MONGODB_DB" --eval "db.events.find({'content.body': {\$regex: 'search term', \$options: 'i'}}).sort({origin_server_ts: -1}).limit(20)"
-
-# Get recent events from a specific room
-mongosh "$MONGODB_URI/$MONGODB_DB" --eval "db.events.find({room_id: '!room:server'}).sort({origin_server_ts: -1}).limit(20)"
-
-# Get recent events globally
-mongosh "$MONGODB_URI/$MONGODB_DB" --eval "db.events.find().sort({origin_server_ts: -1}).limit(20)"
+# Search by room
+matrix-indexer-search "hello" --room "!roomid:server"
 ```
 
-Or use the helper script: `query-matrix.sh search <text>`
+### Direct MongoDB (advanced):
+```bash
+mongosh "$MONGODB_URI/$MONGODB_DB" --eval "db.events.find({'content.body': {\$regex: 'search term', \$options: 'i'}}).sort({origin_server_ts: -1}).limit(20)"
+```
 
 **Default behavior:** If someone asks "what happened with X" or "when did Y happen" or any historical question → query the indexer FIRST, then answer based on results.
 
