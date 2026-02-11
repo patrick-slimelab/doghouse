@@ -289,7 +289,7 @@ gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLA
 gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set channels.discord.groupPolicy "open" || true
 
 echo "[doghouse] Configuring Discord guilds: mention required (with patterns)"
-gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set 'channels.discord.guilds.*.requireMention' false || true
+gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set 'channels.discord.guilds.*.requireMention' true || true
 
 echo "[doghouse] Configuring mention patterns: scoo+b, scooby, scoob"
 gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set messages.groupChat.mentionPatterns '["scoo+b", "scooby", "scoob"]' || true
