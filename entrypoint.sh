@@ -33,6 +33,20 @@ if pw="$(read_secret /run/secrets/matrix_password)"; then
   echo "[doghouse] Loaded MATRIX_PASSWORD from docker secret"
 fi
 
+# Optional second Matrix account for dual indexers
+if hs2="$(read_secret /run/secrets/matrix2_homeserver 2>/dev/null || true)"; then
+  if [[ -n "$hs2" ]]; then export MATRIX2_HOMESERVER="$hs2"; fi
+fi
+if uid2="$(read_secret /run/secrets/matrix2_user_id 2>/dev/null || true)"; then
+  if [[ -n "$uid2" ]]; then export MATRIX2_USER_ID="$uid2"; fi
+fi
+if pw2="$(read_secret /run/secrets/matrix2_password 2>/dev/null || true)"; then
+  if [[ -n "$pw2" ]]; then export MATRIX2_PASSWORD="$pw2"; fi
+fi
+if [[ -n "${MATRIX2_USER_ID:-}" ]]; then
+  echo "[doghouse] Loaded MATRIX2_* docker secrets"
+fi
+
 if gt="$(read_secret /run/secrets/gateway_token)"; then
   export OPENCLAW_GATEWAY_TOKEN="$gt"
   echo "[doghouse] Loaded OPENCLAW_GATEWAY_TOKEN from docker secret"
@@ -96,6 +110,9 @@ SECRETS_FILE="/etc/profile.d/matrix-env.sh"
   [[ -n "${MATRIX_HOMESERVER:-}" ]] && echo "export MATRIX_HOMESERVER='${MATRIX_HOMESERVER}'"
   [[ -n "${MATRIX_USER_ID:-}" ]] && echo "export MATRIX_USER_ID='${MATRIX_USER_ID}'"
   [[ -n "${MATRIX_PASSWORD:-}" ]] && echo "export MATRIX_PASSWORD='${MATRIX_PASSWORD}'"
+  [[ -n "${MATRIX2_HOMESERVER:-}" ]] && echo "export MATRIX2_HOMESERVER='${MATRIX2_HOMESERVER}'"
+  [[ -n "${MATRIX2_USER_ID:-}" ]] && echo "export MATRIX2_USER_ID='${MATRIX2_USER_ID}'"
+  [[ -n "${MATRIX2_PASSWORD:-}" ]] && echo "export MATRIX2_PASSWORD='${MATRIX2_PASSWORD}'"
   [[ -n "${DISCORD_BOT_TOKEN:-}" ]] && echo "export DISCORD_BOT_TOKEN='${DISCORD_BOT_TOKEN}'"
   [[ -n "${OPENCLAW_GATEWAY_TOKEN:-}" ]] && echo "export OPENCLAW_GATEWAY_TOKEN='${OPENCLAW_GATEWAY_TOKEN}'"
   [[ -n "${MEDIAWIKI_URL:-}" ]] && echo "export MEDIAWIKI_URL='${MEDIAWIKI_URL}'"
@@ -216,11 +233,7 @@ if [[ -f /home/scoob/matrix-indexer/bin/matrix-indexer ]]; then
   chmod +x /usr/local/bin/matrix-indexer /usr/local/bin/matrix-indexer-search
 
   if [[ -n "${MATRIX_HOMESERVER:-}" ]]; then
-    echo "[doghouse] Starting Matrix Indexer service..."
-    export MONGODB_URI="${MONGODB_URI:-mongodb://mongo:27017}"
-    mkdir -p /var/log/matrix-indexer
-    chown scoob:scoob /var/log/matrix-indexer
-    gosu scoob nohup /usr/local/bin/matrix-indexer > /var/log/matrix-indexer/matrix-indexer.log 2>&1 &
+    echo "[doghouse] Matrix Indexer binary linked (startup handled later with .env/.env2)"
   fi
 fi
 
@@ -471,11 +484,32 @@ EOF
     chown scoob:scoob /home/scoob/matrix-indexer/.env
     chmod 600 /home/scoob/matrix-indexer/.env
     
-    echo "[doghouse] Starting Matrix Indexer in background..."
+    echo "[doghouse] Starting Matrix Indexer #1 in background..."
     # Using nohup to run in background, detached from this shell
-    gosu scoob bash -c "cd /home/scoob/matrix-indexer && set -a && source .env && set +a && nohup /usr/local/bin/matrix-indexer > /tmp/indexer.log 2>&1 &" &
+    gosu scoob bash -c "cd /home/scoob/matrix-indexer && set -a && source .env && export INDEXER_ID='${MATRIX_USER_ID}' INDEXER_SYNC_TOKEN_PATH='/home/scoob/sync_token.txt' && set +a && nohup /usr/local/bin/matrix-indexer > /tmp/indexer.log 2>&1 &" &
+
+    # Optional second indexer account
+    if [[ -n "${MATRIX2_HOMESERVER:-}" && -n "${MATRIX2_USER_ID:-}" && -n "${MATRIX2_PASSWORD:-}" ]]; then
+      cat > /home/scoob/matrix-indexer/.env2 << EOF
+MATRIX_HOMESERVER=${MATRIX2_HOMESERVER}
+MATRIX_USER_ID=${MATRIX2_USER_ID}
+MATRIX_PASSWORD=${MATRIX2_PASSWORD}
+MONGODB_URI=mongodb://mongo:27017
+MONGODB_DB=matrix_index
+INDEXER_ID=${MATRIX2_USER_ID}
+INDEXER_SYNC_TOKEN_PATH=/home/scoob/sync_token_2.txt
+EOF
+      chown scoob:scoob /home/scoob/matrix-indexer/.env2
+      chmod 600 /home/scoob/matrix-indexer/.env2
+
+      echo "[doghouse] Starting Matrix Indexer #2 in background..."
+      gosu scoob bash -c "cd /home/scoob/matrix-indexer && set -a && source .env2 && set +a && nohup /usr/local/bin/matrix-indexer > /tmp/indexer2.log 2>&1 &" &
+    else
+      echo "[doghouse] MATRIX2_* not fully set; skipping Matrix Indexer #2"
+    fi
+
     sleep 1
-    echo "[doghouse] Matrix Indexer started (PID check in 2 seconds)"
+    echo "[doghouse] Matrix Indexer process launch attempted (PID check in 2 seconds)"
     echo "[doghouse] Starting Matrix maintenance (stale backfill reaper + room cache)"
     gosu scoob bash -lc 'nohup /usr/local/bin/matrix-maintenance > /tmp/matrix-maintenance.log 2>&1 &'
   else
