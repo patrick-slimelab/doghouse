@@ -189,3 +189,14 @@ if matrix_handler.exists():
         print('[doghouse] patched matrix /activation runtime overrides')
         changed = True
 
+
+# Core /activation parser: accept soft mode (and aliases hard/none)
+new_group_activation = '''function normalizeGroupActivation(raw) {
+\tconst value = raw?.trim().toLowerCase();
+\tif (value === "mention" || value === "hard") return "mention";
+\tif (value === "always" || value === "none") return "always";
+\tif (value === "soft") return "soft";
+}'''
+for f in main_files:
+    patch_text(f, lambda s: re.sub(r'function normalizeGroupActivation\(raw\) \{[\s\S]*?\n\}', new_group_activation, s, count=1))
+    patch_text(f, lambda s: s.replace('⚙️ Usage: /activation mention|always', '⚙️ Usage: /activation mention|soft|always'))
