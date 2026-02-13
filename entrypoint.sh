@@ -4,6 +4,30 @@ set -euo pipefail
 STATE_DIR="${OPENCLAW_STATE_DIR:-$HOME/.openclaw}"
 CFG_PATH="${OPENCLAW_CONFIG_PATH:-$STATE_DIR/openclaw.json}"
 
+# Apply OpenClaw JS runtime patch ASAP (before any potential early exit paths).
+# Goal: keep /bash support but disable legacy !-prefix bash command behavior + warnings.
+apply_bash_prefix_patch() {
+  echo "[doghouse] Patching OpenClaw bash parser: disable !-prefix command trigger"
+  python3 - <<'PY' || true
+import glob, re
+files = glob.glob('/opt/openclaw/dist/loader-*.js') + glob.glob('/opt/openclaw/dist/reply-*.js') + ['/opt/openclaw/dist/extensionAPI.js']
+warn = 'if (params.cfg.commands?.bash !== true) return { text: "⚠️ bash is disabled. Set commands.bash=true to enable. Docs: https://docs.openclaw.ai/tools/slash-commands#config" };'
+for f in files:
+    try:
+        s = open(f, encoding='utf-8').read()
+    except FileNotFoundError:
+        continue
+    orig = s
+    s = re.sub(r'\} else if \(trimmed\.startsWith\("!"\)\) \{\n\s*restSource = trimmed\.slice\(1\);\n\s*if \(restSource\.trimStart\(\)\.startsWith\(":"\)\) restSource = restSource\.trimStart\(\)\.slice\(1\);\n\s*\} else return null;', '} else return null;', s, count=1, flags=re.S)
+    s = s.replace('const bashBangRequested = command.commandBodyNormalized.startsWith("!");', 'const bashBangRequested = false;')
+    s = s.replace(warn, 'if (params.cfg.commands?.bash !== true) return null;')
+    if s != orig:
+        open(f, 'w', encoding='utf-8').write(s)
+        print(f'[doghouse] patched {f}')
+PY
+}
+apply_bash_prefix_patch
+
 read_secret() {
   local path="$1"
   [[ -f "$path" ]] || return 1
@@ -549,32 +573,6 @@ if [[ -f /home/scoob/.openclaw/skills/mediawiki-cclub/scripts/mediawiki.sh ]]; t
   ln -sf /home/scoob/.openclaw/skills/mediawiki-cclub/scripts/mediawiki.sh /usr/local/bin/mediawiki
   chmod +x /usr/local/bin/mediawiki
 fi
-
-# Doghouse runtime patch: disable legacy `!` bash trigger (keep `/bash` only).
-# Matrix communities often use `!` for bot commands (e.g., !sd), and OpenClaw's
-# default parser treats `!` as bash command syntax even when bash is disabled.
-# We patch compiled bundles at startup so container rebuilds/restarts keep behavior.
-echo "[doghouse] Patching OpenClaw bash parser: disable !-prefix command trigger"
-python3 - <<'PY' || true
-import glob, re
-files = glob.glob('/opt/openclaw/dist/loader-*.js') + glob.glob('/opt/openclaw/dist/reply-*.js') + ['/opt/openclaw/dist/extensionAPI.js']
-warn = 'if (params.cfg.commands?.bash !== true) return { text: "⚠️ bash is disabled. Set commands.bash=true to enable. Docs: https://docs.openclaw.ai/tools/slash-commands#config" };'
-for f in files:
-    try:
-        s = open(f, encoding='utf-8').read()
-    except FileNotFoundError:
-        continue
-    orig = s
-    # 1) Remove legacy `!` handling from parseBashRequest()
-    s = re.sub(r'\} else if \(trimmed\.startsWith\("!"\)\) \{\n\s*restSource = trimmed\.slice\(1\);\n\s*if \(restSource\.trimStart\(\)\.startsWith\(":"\)\) restSource = restSource\.trimStart\(\)\.slice\(1\);\n\s*\} else return null;', '} else return null;', s, count=1, flags=re.S)
-    # 2) Disable `!` fast-path detection in commands-bash handler
-    s = s.replace('const bashBangRequested = command.commandBodyNormalized.startsWith("!");', 'const bashBangRequested = false;')
-    # 3) Suppress disabled-bash warning (return null instead of chat warning)
-    s = s.replace(warn, 'if (params.cfg.commands?.bash !== true) return null;')
-    if s != orig:
-        open(f, 'w', encoding='utf-8').write(s)
-        print(f'[doghouse] patched {f}')
-PY
 
 # Finally run the gateway as scoob
 exec gosu scoob "$@"
