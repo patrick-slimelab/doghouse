@@ -37,10 +37,18 @@ services:
     image: vllm/vllm-openai:latest
     container_name: ${BOT_CANONICAL_NAME:-scoob}-vllm
     restart: unless-stopped
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
     command: >
-      --model Qwen/Qwen3-Coder-Next
+      --model /models/Qwen/Qwen3-Coder-Next
       --max-model-len 262144
       --dtype auto
+      --tensor-parallel-size 2
     ports:
       - "127.0.0.1:8000:8000"
     volumes:
