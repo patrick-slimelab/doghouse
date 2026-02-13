@@ -29,7 +29,7 @@ FROM node:22-bookworm
 
 # Minimal deps for runtime + entrypoint privilege drop + sudo + curl/jq + sshd
 RUN apt-get update \
- && apt-get install -y --no-install-recommends ca-certificates tini gosu sudo curl jq openssh-server ripgrep gh \
+ && apt-get install -y --no-install-recommends ca-certificates tini gosu sudo curl jq openssh-server ripgrep gh python3-pip \
  && rm -rf /var/lib/apt/lists/*
 
 # Install cloudflared (for Dongometer tunnel)
