@@ -549,6 +549,17 @@ if [[ -f /home/scoob/.openclaw/skills/mediawiki-cclub/scripts/mediawiki.sh ]]; t
   ln -sf /home/scoob/.openclaw/skills/mediawiki-cclub/scripts/mediawiki.sh /usr/local/bin/mediawiki
   chmod +x /usr/local/bin/mediawiki
 fi
+
+# Doghouse runtime patch: disable legacy `!` bash trigger (keep `/bash` only).
+# Matrix communities often use `!` for bot commands (e.g., !sd), and OpenClaw's
+# default parser treats `!` as bash command syntax even when bash is disabled.
+# We patch compiled bundles at startup so container rebuilds/restarts keep behavior.
+echo "[doghouse] Patching OpenClaw bash parser: disable !-prefix command trigger"
+for f in /opt/openclaw/dist/loader-*.js /opt/openclaw/dist/reply-*.js /opt/openclaw/dist/extensionAPI.js; do
+  [[ -f "$f" ]] || continue
+  perl -0777 -i -pe 's/\} else if \(trimmed\.startsWith\("!"\)\) \{\n\t\trestSource = trimmed\.slice\(1\);\n\t\tif \(restSource\.trimStart\(\)\.startsWith\(":"\)\) restSource = restSource\.trimStart\(\)\.slice\(1\);\n\t\} else return null;/\} else return null;/s' "$f" || true
+done
+
 # Finally run the gateway as scoob
 exec gosu scoob "$@"
 
