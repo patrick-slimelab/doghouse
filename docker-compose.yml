@@ -41,7 +41,7 @@ services:
         # Build from the Qwen source-of-truth branch
         MOLTBOT_REF: feature/qwen-engine
         # Cache-bust so docker build pulls latest branch head when redeploying
-        MOLTBOT_CACHE_BUST: ${MOLTBOT_CACHE_BUST:-2}
+        MOLTBOT_CACHE_BUST: ${MOLTBOT_CACHE_BUST:-3}
     container_name: ${BOT_CANONICAL_NAME:-scoob}-doghouse
     restart: unless-stopped
     depends_on:
