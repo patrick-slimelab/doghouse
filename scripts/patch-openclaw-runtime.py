@@ -100,3 +100,73 @@ for f in sandbox_files:
 
 if not changed:
     print('[doghouse] runtime patch: no changes needed')
+
+
+# Matrix extension: hard mode should only honor explicit mentions.
+matrix_handler = Path('/opt/openclaw/extensions/matrix/src/matrix/monitor/handler.ts')
+if matrix_handler.exists():
+    ms = matrix_handler.read_text(encoding='utf-8')
+    orig = ms
+    old = """      const { wasMentioned, hasExplicitMention } = resolveMentions({
+        content,
+        userId: selfUserId,
+        text: bodyText,
+        mentionRegexes,
+      });"""
+    new = """      const { wasMentioned, hasExplicitMention } = resolveMentions({
+        content,
+        userId: selfUserId,
+        text: bodyText,
+        mentionRegexes,
+      });
+      const mentionMode = (() => {
+        const parseMode = (value: unknown): "hard" | "soft" | "none" | undefined => {
+          if (typeof value !== "string") return undefined;
+          const v = value.trim().toLowerCase();
+          if (v === "hard" || v === "hard-mention") return "hard";
+          if (v === "soft" || v === "soft-mention") return "soft";
+          if (v === "none" || v === "no" || v === "off" || v === "never" || v === "no-mention") return "none";
+          return undefined;
+        };
+        let overrides: Record<string, string> = {};
+        try {
+          if (process.env.OPENCLAW_MENTION_MODE_OVERRIDES) {
+            const parsed = JSON.parse(process.env.OPENCLAW_MENTION_MODE_OVERRIDES);
+            if (parsed && typeof parsed === "object") overrides = parsed as Record<string, string>;
+          }
+        } catch {}
+        const defaultMode = parseMode(process.env.OPENCLAW_MENTION_MODE_DEFAULT) ?? "hard";
+        const fromOverride = parseMode(overrides[`matrix:${roomId}`] ?? overrides[roomId] ?? overrides["matrix:*"] ?? overrides["*"]);
+        return fromOverride ?? defaultMode;
+      })();
+      const effectiveWasMentioned = mentionMode === "hard" ? hasExplicitMention : mentionMode === "soft" ? wasMentioned : true;"""
+    old2 = """      const shouldRequireMention = isRoom
+        ? roomConfig?.autoReply === true
+          ? false
+          : roomConfig?.autoReply === false
+            ? true
+            : typeof roomConfig?.requireMention === "boolean"
+              ? roomConfig?.requireMention
+              : true
+        : false;"""
+    new2 = """      const shouldRequireMentionBase = isRoom
+        ? roomConfig?.autoReply === true
+          ? false
+          : roomConfig?.autoReply === false
+            ? true
+            : typeof roomConfig?.requireMention === "boolean"
+              ? roomConfig?.requireMention
+              : true
+        : false;
+      const shouldRequireMention = mentionMode === "none" ? false : mentionMode === "hard" || mentionMode === "soft" ? true : shouldRequireMentionBase;"""
+    if old in ms:
+        ms = ms.replace(old, new, 1)
+    if old2 in ms:
+        ms = ms.replace(old2, new2, 1)
+    ms = ms.replace('        !wasMentioned &&', '        !effectiveWasMentioned &&', 1)
+    ms = ms.replace('      if (isRoom && shouldRequireMention && !wasMentioned && !shouldBypassMention) {', '      if (isRoom && shouldRequireMention && !effectiveWasMentioned && !shouldBypassMention) {', 1)
+    if ms != orig:
+        matrix_handler.write_text(ms, encoding='utf-8')
+        print('[doghouse] patched /opt/openclaw/extensions/matrix/src/matrix/monitor/handler.ts')
+        changed = True
+
