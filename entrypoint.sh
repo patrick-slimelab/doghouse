@@ -154,13 +154,13 @@ if command -v cloudflared >/dev/null 2>&1; then
       chmod 600 "$cred_file"
       tunnel_id="$(printf '%s' "$CLOUDFLARED_TUNNEL_SECRET" | jq -r '.TunnelID // empty' 2>/dev/null || true)"
       if [[ -n "$tunnel_id" ]]; then
-        gosu scoob nohup cloudflared --no-autoupdate tunnel run --credentials-file "$cred_file" "$tunnel_id" > /var/log/cloudflared.log 2>&1 &
+        gosu scoob nohup cloudflared --no-autoupdate tunnel run --credentials-file "$cred_file" --url http://127.0.0.1:5000 "$tunnel_id" > /var/log/cloudflared.log 2>&1 &
       else
         echo "[doghouse] cloudflared secret looked like JSON but TunnelID missing"
       fi
     else
       echo "[doghouse] Starting cloudflared (token mode)..."
-      gosu scoob nohup cloudflared --no-autoupdate tunnel run --token "$CLOUDFLARED_TUNNEL_SECRET" > /var/log/cloudflared.log 2>&1 &
+      gosu scoob nohup cloudflared --no-autoupdate tunnel run --token "$CLOUDFLARED_TUNNEL_SECRET" --url http://127.0.0.1:5000 > /var/log/cloudflared.log 2>&1 &
     fi
   elif [[ -f /home/scoob/.cloudflared/config.yml ]]; then
     echo "[doghouse] Starting cloudflared (config mode)..."
