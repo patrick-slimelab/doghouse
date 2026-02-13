@@ -555,15 +555,26 @@ fi
 # default parser treats `!` as bash command syntax even when bash is disabled.
 # We patch compiled bundles at startup so container rebuilds/restarts keep behavior.
 echo "[doghouse] Patching OpenClaw bash parser: disable !-prefix command trigger"
-for f in /opt/openclaw/dist/loader-*.js /opt/openclaw/dist/reply-*.js /opt/openclaw/dist/extensionAPI.js; do
-  [[ -f "$f" ]] || continue
-  # 1) Remove legacy `!` handling from parseBashRequest()
-  perl -0777 -i -pe 's/\} else if \(trimmed\.startsWith\("!"\)\) \{\n\t\trestSource = trimmed\.slice\(1\);\n\t\tif \(restSource\.trimStart\(\)\.startsWith\(":"\)\) restSource = restSource\.trimStart\(\)\.slice\(1\);\n\t\} else return null;/\} else return null;/s' "$f" || true
-  # 2) Disable `!` fast-path detection in commands-bash handler
-  perl -0777 -i -pe 's/const bashBangRequested = command\.commandBodyNormalized\.startsWith\("!"\);/const bashBangRequested = false;/g' "$f" || true
-  # 3) Suppress disabled-bash warning (return null instead of chat warning)
-  perl -0777 -i -pe 's/if \(params\.cfg\.commands\?\.bash !== true\) return \{ text: "⚠️ bash is disabled\. Set commands\.bash=true to enable\. Docs: https:\/\/docs\.openclaw\.ai\/tools\/slash-commands#config" \};/if (params.cfg.commands?.bash !== true) return null;/g' "$f" || true
-done
+python3 - <<'PY' || true
+import glob, re
+files = glob.glob('/opt/openclaw/dist/loader-*.js') + glob.glob('/opt/openclaw/dist/reply-*.js') + ['/opt/openclaw/dist/extensionAPI.js']
+warn = 'if (params.cfg.commands?.bash !== true) return { text: "⚠️ bash is disabled. Set commands.bash=true to enable. Docs: https://docs.openclaw.ai/tools/slash-commands#config" };'
+for f in files:
+    try:
+        s = open(f, encoding='utf-8').read()
+    except FileNotFoundError:
+        continue
+    orig = s
+    # 1) Remove legacy `!` handling from parseBashRequest()
+    s = re.sub(r'\} else if \(trimmed\.startsWith\("!"\)\) \{\n\s*restSource = trimmed\.slice\(1\);\n\s*if \(restSource\.trimStart\(\)\.startsWith\(":"\)\) restSource = restSource\.trimStart\(\)\.slice\(1\);\n\s*\} else return null;', '} else return null;', s, count=1, flags=re.S)
+    # 2) Disable `!` fast-path detection in commands-bash handler
+    s = s.replace('const bashBangRequested = command.commandBodyNormalized.startsWith("!");', 'const bashBangRequested = false;')
+    # 3) Suppress disabled-bash warning (return null instead of chat warning)
+    s = s.replace(warn, 'if (params.cfg.commands?.bash !== true) return null;')
+    if s != orig:
+        open(f, 'w', encoding='utf-8').write(s)
+        print(f'[doghouse] patched {f}')
+PY
 
 # Finally run the gateway as scoob
 exec gosu scoob "$@"
