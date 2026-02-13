@@ -38,6 +38,14 @@ if gt="$(read_secret /run/secrets/gateway_token)"; then
   echo "[doghouse] Loaded OPENCLAW_GATEWAY_TOKEN from docker secret"
 fi
 
+# Optional Cloudflare tunnel token (for Dongometer/public services)
+if cft="$(read_secret /run/secrets/cloudflared_tunnel_token 2>/dev/null || true)"; then
+  if [[ -n "$cft" ]]; then
+    export CLOUDFLARED_TUNNEL_TOKEN="$cft"
+    echo "[doghouse] Loaded CLOUDFLARED_TUNNEL_TOKEN from docker secret"
+  fi
+fi
+
 # Web search (Brave)
 if bk="$(read_secret /run/secrets/brave_api_key)"; then
   export BRAVE_API_KEY="$bk"
@@ -129,6 +137,21 @@ gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLA
 if [[ -x /home/scoob/dongometer/dongometerctl ]]; then
   echo [doghouse] Auto-starting dongometer
   gosu scoob /home/scoob/dongometer/dongometerctl restart || true
+fi
+
+# --- cloudflared tunnel auto-start (for Dongometer hostname) ---
+if command -v cloudflared >/dev/null 2>&1; then
+  mkdir -p /var/log
+
+  if [[ -n "${CLOUDFLARED_TUNNEL_TOKEN:-}" ]]; then
+    echo "[doghouse] Starting cloudflared (token mode)..."
+    gosu scoob nohup cloudflared tunnel run --no-autoupdate --token "$CLOUDFLARED_TUNNEL_TOKEN" > /var/log/cloudflared.log 2>&1 &
+  elif [[ -f /home/scoob/.cloudflared/config.yml ]]; then
+    echo "[doghouse] Starting cloudflared (config mode)..."
+    gosu scoob nohup cloudflared tunnel --config /home/scoob/.cloudflared/config.yml --no-autoupdate run > /var/log/cloudflared.log 2>&1 &
+  else
+    echo "[doghouse] cloudflared not started (no token secret or ~/.cloudflared/config.yml)"
+  fi
 fi
 
 # Configure SSH if authorized_keys secret is present

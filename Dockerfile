@@ -32,6 +32,10 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates tini gosu sudo curl jq openssh-server ripgrep gh \
  && rm -rf /var/lib/apt/lists/*
 
+# Install cloudflared (for Dongometer tunnel)
+RUN curl -fsSL https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 -o /usr/local/bin/cloudflared \
+ && chmod +x /usr/local/bin/cloudflared
+
 # Install mongosh (used by discord-indexer-search / Mongo inspection)
 RUN curl -fsSL https://downloads.mongodb.com/compass/mongosh-2.3.8-linux-x64.tgz -o /tmp/mongosh.tgz \
  && tar -xzf /tmp/mongosh.tgz -C /tmp \

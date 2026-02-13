@@ -110,6 +110,7 @@ services:
       - authorized_keys
       - id_ed25519
       - gh_token
+      - cloudflared_tunnel_token
 
     # Lockdown (disabled for stability)
     read_only: false
@@ -153,6 +154,8 @@ secrets:
     file: ./secrets/id_ed25519
   gh_token:
     file: ./secrets/gh_token
+  cloudflared_tunnel_token:
+    file: ./secrets/cloudflared_tunnel_token
 
 volumes:
   doghouse_state:
