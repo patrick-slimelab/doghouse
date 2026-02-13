@@ -1,3 +1,4 @@
 .env
 secrets/*
 !secrets/README.md
+workspace-defaults/openclaw.json
