@@ -38,11 +38,11 @@ if gt="$(read_secret /run/secrets/gateway_token)"; then
   echo "[doghouse] Loaded OPENCLAW_GATEWAY_TOKEN from docker secret"
 fi
 
-# Optional Cloudflare tunnel token (for Dongometer/public services)
+# Optional Cloudflare tunnel secret (token or credentials JSON) for Dongometer/public services
 if cft="$(read_secret /run/secrets/cloudflared_tunnel_token 2>/dev/null || true)"; then
   if [[ -n "$cft" ]]; then
-    export CLOUDFLARED_TUNNEL_TOKEN="$cft"
-    echo "[doghouse] Loaded CLOUDFLARED_TUNNEL_TOKEN from docker secret"
+    export CLOUDFLARED_TUNNEL_SECRET="$cft"
+    echo "[doghouse] Loaded cloudflared tunnel secret from docker secret"
   fi
 fi
 
@@ -141,16 +141,32 @@ fi
 
 # --- cloudflared tunnel auto-start (for Dongometer hostname) ---
 if command -v cloudflared >/dev/null 2>&1; then
-  mkdir -p /var/log
+  mkdir -p /var/log /home/scoob/.cloudflared
+  chown -R scoob:scoob /home/scoob/.cloudflared || true
 
-  if [[ -n "${CLOUDFLARED_TUNNEL_TOKEN:-}" ]]; then
-    echo "[doghouse] Starting cloudflared (token mode)..."
-    gosu scoob nohup cloudflared --no-autoupdate tunnel run --token "$CLOUDFLARED_TUNNEL_TOKEN" > /var/log/cloudflared.log 2>&1 &
+  if [[ -n "${CLOUDFLARED_TUNNEL_SECRET:-}" ]]; then
+    # Accept either a run token OR a credentials JSON blob.
+    if [[ "${CLOUDFLARED_TUNNEL_SECRET:0:1}" == "{" ]]; then
+      echo "[doghouse] Starting cloudflared (credentials JSON mode)..."
+      cred_file="/home/scoob/.cloudflared/doghouse-creds.json"
+      printf '%s' "$CLOUDFLARED_TUNNEL_SECRET" > "$cred_file"
+      chown scoob:scoob "$cred_file"
+      chmod 600 "$cred_file"
+      tunnel_id="$(printf '%s' "$CLOUDFLARED_TUNNEL_SECRET" | jq -r '.TunnelID // empty' 2>/dev/null || true)"
+      if [[ -n "$tunnel_id" ]]; then
+        gosu scoob nohup cloudflared --no-autoupdate tunnel run --credentials-file "$cred_file" "$tunnel_id" > /var/log/cloudflared.log 2>&1 &
+      else
+        echo "[doghouse] cloudflared secret looked like JSON but TunnelID missing"
+      fi
+    else
+      echo "[doghouse] Starting cloudflared (token mode)..."
+      gosu scoob nohup cloudflared --no-autoupdate tunnel run --token "$CLOUDFLARED_TUNNEL_SECRET" > /var/log/cloudflared.log 2>&1 &
+    fi
   elif [[ -f /home/scoob/.cloudflared/config.yml ]]; then
     echo "[doghouse] Starting cloudflared (config mode)..."
     gosu scoob nohup cloudflared --no-autoupdate tunnel --config /home/scoob/.cloudflared/config.yml run > /var/log/cloudflared.log 2>&1 &
   else
-    echo "[doghouse] cloudflared not started (no token secret or ~/.cloudflared/config.yml)"
+    echo "[doghouse] cloudflared not started (no token/credentials secret or ~/.cloudflared/config.yml)"
   fi
 fi
 
