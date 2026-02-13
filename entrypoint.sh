@@ -4,29 +4,14 @@ set -euo pipefail
 STATE_DIR="${OPENCLAW_STATE_DIR:-$HOME/.openclaw}"
 CFG_PATH="${OPENCLAW_CONFIG_PATH:-$STATE_DIR/openclaw.json}"
 
-# Apply OpenClaw JS runtime patch ASAP (before any potential early exit paths).
-# Goal: keep /bash support but disable legacy !-prefix bash command behavior + warnings.
-apply_bash_prefix_patch() {
-  echo "[doghouse] Patching OpenClaw bash parser: disable !-prefix command trigger"
-  python3 - <<'PY' || true
-import glob, re
-files = glob.glob('/opt/openclaw/dist/loader-*.js') + glob.glob('/opt/openclaw/dist/reply-*.js') + ['/opt/openclaw/dist/extensionAPI.js']
-warn = 'if (params.cfg.commands?.bash !== true) return { text: "⚠️ bash is disabled. Set commands.bash=true to enable. Docs: https://docs.openclaw.ai/tools/slash-commands#config" };'
-for f in files:
-    try:
-        s = open(f, encoding='utf-8').read()
-    except FileNotFoundError:
-        continue
-    orig = s
-    s = re.sub(r'\} else if \(trimmed\.startsWith\("!"\)\) \{\n\s*restSource = trimmed\.slice\(1\);\n\s*if \(restSource\.trimStart\(\)\.startsWith\(":"\)\) restSource = restSource\.trimStart\(\)\.slice\(1\);\n\s*\} else return null;', '} else return null;', s, count=1, flags=re.S)
-    s = s.replace('const bashBangRequested = command.commandBodyNormalized.startsWith("!");', 'const bashBangRequested = false;')
-    s = s.replace(warn, 'if (params.cfg.commands?.bash !== true) return null;')
-    if s != orig:
-        open(f, 'w', encoding='utf-8').write(s)
-        print(f'[doghouse] patched {f}')
-PY
-}
-apply_bash_prefix_patch
+# Apply OpenClaw JS runtime patches ASAP (before any potential early exit paths).
+# Includes:
+# - disable legacy !-prefix bash command path (keep /bash)
+# - suppress disabled-bash warning replies
+# - add mention trigger modes + mention_regex support
+if [[ -f /opt/doghouse/scripts/patch-openclaw-runtime.py ]]; then
+  python3 /opt/doghouse/scripts/patch-openclaw-runtime.py || true
+fi
 
 read_secret() {
   local path="$1"
@@ -385,6 +370,18 @@ gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLA
 
 echo "[doghouse] Configuring mention patterns: scoo+b, scooby, scoob"
 gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set messages.groupChat.mentionPatterns '["scoo+b", "scooby", "scoob"]' || true
+echo "[doghouse] Configuring trigger modes (hard default, soft #the-doghouse)"
+python3 - <<'PYCFG' || true
+import json
+p='/home/scoob/.openclaw/openclaw.json'
+obj=json.load(open(p))
+gc=obj.setdefault('messages',{}).setdefault('groupChat',{})
+gc['mention_regex']='scoo+b\\w*'
+gc['mentionModeDefault']='hard'
+gc.setdefault('mentionModeOverrides',{})['matrix:!rfkqkxlyocxeqmrbxi:cclub.cs.wmich.edu']='soft'
+with open(p,'w') as f: json.dump(obj,f,indent=2)
+print('[doghouse] wrote messages.groupChat mention mode config')
+PYCFG
 
 # Message queueing (prevents rapid double-replies; especially helpful on Matrix)
 echo "[doghouse] Configuring messages.queue (collect + debounce)"
@@ -398,7 +395,7 @@ gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLA
 gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set channels.matrix.typing '{"enabled": true}' --json || true
 
 echo "[doghouse] Configuring Matrix groups: mention required (with patterns)"
-gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set 'channels.matrix.groups.*.requireMention' false || true
+gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set 'channels.matrix.groups.*.requireMention' true || true
 
 # Ensure gateway is allowed to run
 MODE="$(gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config get gateway.mode 2>/dev/null || true)"
