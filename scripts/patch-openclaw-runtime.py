@@ -81,7 +81,7 @@ new_resolve_patterns = '''function resolveMentionPatterns(cfg, agentId) {
 \t\t}
 \t}
 \tconst groupCfg = cfg.messages?.groupChat;
-\tconst singleRegex = process?.env?.OPENCLAW_MENTION_REGEX ?? groupCfg?.mention_regex ?? groupCfg?.mentionRegex;
+\tconst singleRegex = groupCfg?.mention_regex ?? groupCfg?.mentionRegex;
 \tif (typeof singleRegex === "string" && singleRegex.trim()) patterns = [...patterns, singleRegex.trim()];
 \treturn patterns;
 }'''
@@ -139,7 +139,8 @@ if matrix_handler.exists():
         const fromOverride = parseMode(overrides[`matrix:${roomId}`] ?? overrides[roomId] ?? overrides["matrix:*"] ?? overrides["*"]);
         return fromOverride ?? defaultMode;
       })();
-      const effectiveWasMentioned = mentionMode === "hard" ? hasExplicitMention : mentionMode === "soft" ? wasMentioned : true;"""
+      const softRegexHit = (() => { try { const rx = process.env.OPENCLAW_MENTION_REGEX; return typeof rx === "string" && rx.trim().length > 0 ? new RegExp(rx, "i").test(bodyText) : false; } catch { return false; } })();
+      const effectiveWasMentioned = mentionMode === "hard" ? hasExplicitMention : mentionMode === "soft" ? (hasExplicitMention || softRegexHit) : true;"""
     old2 = """      const shouldRequireMention = isRoom
         ? roomConfig?.autoReply === true
           ? false
