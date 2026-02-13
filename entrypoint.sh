@@ -145,10 +145,10 @@ if command -v cloudflared >/dev/null 2>&1; then
 
   if [[ -n "${CLOUDFLARED_TUNNEL_TOKEN:-}" ]]; then
     echo "[doghouse] Starting cloudflared (token mode)..."
-    gosu scoob nohup cloudflared tunnel run --no-autoupdate --token "$CLOUDFLARED_TUNNEL_TOKEN" > /var/log/cloudflared.log 2>&1 &
+    gosu scoob nohup cloudflared --no-autoupdate tunnel run --token "$CLOUDFLARED_TUNNEL_TOKEN" > /var/log/cloudflared.log 2>&1 &
   elif [[ -f /home/scoob/.cloudflared/config.yml ]]; then
     echo "[doghouse] Starting cloudflared (config mode)..."
-    gosu scoob nohup cloudflared tunnel --config /home/scoob/.cloudflared/config.yml --no-autoupdate run > /var/log/cloudflared.log 2>&1 &
+    gosu scoob nohup cloudflared --no-autoupdate tunnel --config /home/scoob/.cloudflared/config.yml run > /var/log/cloudflared.log 2>&1 &
   else
     echo "[doghouse] cloudflared not started (no token secret or ~/.cloudflared/config.yml)"
   fi
