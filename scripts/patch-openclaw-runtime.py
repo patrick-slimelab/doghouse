@@ -23,43 +23,48 @@ def patch_text(path: str, fn):
 warn = 'if (params.cfg.commands?.bash !== true) return { text: "⚠️ bash is disabled. Set commands.bash=true to enable. Docs: https://docs.openclaw.ai/tools/slash-commands#config" };'
 
 new_require_fn = '''function resolveChannelGroupRequireMention(params) {
-\tconst { requireMentionOverride, overrideOrder = "after-config" } = params;
-\tconst { groupConfig, defaultConfig } = resolveChannelGroupPolicy(params);
-\tconst configMention = typeof groupConfig?.requireMention === "boolean" ? groupConfig.requireMention : typeof defaultConfig?.requireMention === "boolean" ? defaultConfig.requireMention : void 0;
-\tif (overrideOrder === "before-config" && typeof requireMentionOverride === "boolean") return requireMentionOverride;
-\tconst groupChatCfg = params.cfg?.messages?.groupChat ?? {};
-\tconst normalizeMode = (value) => {
-\t\tif (typeof value !== "string") return;
-\t\tconst v = value.trim().toLowerCase();
-\t\tif (!v) return;
-\t\tif (v === "hard" || v === "hard-mention") return "hard";
-\t\tif (v === "soft" || v === "soft-mention") return "soft";
-\t\tif (v === "none" || v === "no" || v === "off" || v === "never" || v === "no-mention") return "none";
-\t};
-\tconst modeOverrides = groupChatCfg.mentionModeOverrides ?? groupChatCfg.mention_mode_overrides;
-\tconst defaultMode = normalizeMode(groupChatCfg.mentionModeDefault ?? groupChatCfg.mention_mode_default);
-\tlet effectiveMode;
-\tif (modeOverrides && typeof modeOverrides === "object") {
-\t\tconst gid = params.groupId?.trim();
-\t\tconst candidates = [];
-\t\tif (params.channel && gid) candidates.push(`${params.channel}:${gid}`);
-\t\tif (gid) candidates.push(gid);
-\t\tif (params.channel) candidates.push(`${params.channel}:*`);
-\t\tcandidates.push("*");
-\t\tfor (const key of candidates) {
-\t\t\tif (!key) continue;
-\t\t\tconst mode = normalizeMode(modeOverrides[key]);
-\t\t\tif (mode) { effectiveMode = mode; break; }
-\t\t}
-\t}
-\teffectiveMode = effectiveMode ?? defaultMode;
-\tif (effectiveMode === "hard") return true;
-\tif (effectiveMode === "none") return false;
-\tif (effectiveMode === "soft") return typeof configMention === "boolean" ? configMention : true;
-\tif (typeof configMention === "boolean") return configMention;
-\tif (overrideOrder !== "before-config" && typeof requireMentionOverride === "boolean") return requireMentionOverride;
-\treturn true;
+	const { requireMentionOverride, overrideOrder = "after-config" } = params;
+	const { groupConfig, defaultConfig } = resolveChannelGroupPolicy(params);
+	const configMention = typeof groupConfig?.requireMention === "boolean" ? groupConfig.requireMention : typeof defaultConfig?.requireMention === "boolean" ? defaultConfig.requireMention : void 0;
+	if (overrideOrder === "before-config" && typeof requireMentionOverride === "boolean") return requireMentionOverride;
+	const groupChatCfg = params.cfg?.messages?.groupChat ?? {};
+	const normalizeMode = (value) => {
+		if (typeof value !== "string") return;
+		const v = value.trim().toLowerCase();
+		if (!v) return;
+		if (v === "hard" || v === "hard-mention") return "hard";
+		if (v === "soft" || v === "soft-mention") return "soft";
+		if (v === "none" || v === "no" || v === "off" || v === "never" || v === "no-mention") return "none";
+	};
+	let envOverrides = {};
+	try {
+		if (process?.env?.OPENCLAW_MENTION_MODE_OVERRIDES) envOverrides = JSON.parse(process.env.OPENCLAW_MENTION_MODE_OVERRIDES);
+	} catch {}
+	const modeOverrides = (envOverrides && typeof envOverrides === "object" ? envOverrides : {}) || groupChatCfg.mentionModeOverrides || groupChatCfg.mention_mode_overrides || {};
+	const defaultMode = normalizeMode(process?.env?.OPENCLAW_MENTION_MODE_DEFAULT) ?? normalizeMode(groupChatCfg.mentionModeDefault ?? groupChatCfg.mention_mode_default);
+	let effectiveMode;
+	if (modeOverrides && typeof modeOverrides === "object") {
+		const gid = params.groupId?.trim();
+		const candidates = [];
+		if (params.channel && gid) candidates.push(`${params.channel}:${gid}`);
+		if (gid) candidates.push(gid);
+		if (params.channel) candidates.push(`${params.channel}:*`);
+		candidates.push("*");
+		for (const key of candidates) {
+			if (!key) continue;
+			const mode = normalizeMode(modeOverrides[key]);
+			if (mode) { effectiveMode = mode; break; }
+		}
+	}
+	effectiveMode = effectiveMode ?? defaultMode;
+	if (effectiveMode === "hard") return true;
+	if (effectiveMode === "none") return false;
+	if (effectiveMode === "soft") return typeof configMention === "boolean" ? configMention : true;
+	if (typeof configMention === "boolean") return configMention;
+	if (overrideOrder !== "before-config" && typeof requireMentionOverride === "boolean") return requireMentionOverride;
+	return true;
 }'''
+
 
 new_resolve_patterns = '''function resolveMentionPatterns(cfg, agentId) {
 \tif (!cfg) return [];
@@ -76,7 +81,7 @@ new_resolve_patterns = '''function resolveMentionPatterns(cfg, agentId) {
 \t\t}
 \t}
 \tconst groupCfg = cfg.messages?.groupChat;
-\tconst singleRegex = groupCfg?.mention_regex ?? groupCfg?.mentionRegex;
+\tconst singleRegex = process?.env?.OPENCLAW_MENTION_REGEX ?? groupCfg?.mention_regex ?? groupCfg?.mentionRegex;
 \tif (typeof singleRegex === "string" && singleRegex.trim()) patterns = [...patterns, singleRegex.trim()];
 \treturn patterns;
 }'''

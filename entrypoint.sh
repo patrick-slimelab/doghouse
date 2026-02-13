@@ -4,6 +4,12 @@ set -euo pipefail
 STATE_DIR="${OPENCLAW_STATE_DIR:-$HOME/.openclaw}"
 CFG_PATH="${OPENCLAW_CONFIG_PATH:-$STATE_DIR/openclaw.json}"
 
+# Trigger mode runtime defaults (schema-safe via env; runtime patch consumes these)
+: "${OPENCLAW_MENTION_REGEX:=scoo+b\w*}"
+: "${OPENCLAW_MENTION_MODE_DEFAULT:=hard}"
+: "${OPENCLAW_MENTION_MODE_OVERRIDES:={\"matrix:!rfkqkxlyocxeqmrbxi:cclub.cs.wmich.edu\":\"soft\"}}"
+export OPENCLAW_MENTION_REGEX OPENCLAW_MENTION_MODE_DEFAULT OPENCLAW_MENTION_MODE_OVERRIDES
+
 # Apply OpenClaw JS runtime patches ASAP (before any potential early exit paths).
 # Includes:
 # - disable legacy !-prefix bash command path (keep /bash)
@@ -370,18 +376,6 @@ gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLA
 
 echo "[doghouse] Configuring mention patterns: scoo+b, scooby, scoob"
 gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set messages.groupChat.mentionPatterns '["scoo+b", "scooby", "scoob"]' || true
-echo "[doghouse] Configuring trigger modes (hard default, soft #the-doghouse)"
-python3 - <<'PYCFG' || true
-import json
-p='/home/scoob/.openclaw/openclaw.json'
-obj=json.load(open(p))
-gc=obj.setdefault('messages',{}).setdefault('groupChat',{})
-gc['mention_regex']='scoo+b\\w*'
-gc['mentionModeDefault']='hard'
-gc.setdefault('mentionModeOverrides',{})['matrix:!rfkqkxlyocxeqmrbxi:cclub.cs.wmich.edu']='soft'
-with open(p,'w') as f: json.dump(obj,f,indent=2)
-print('[doghouse] wrote messages.groupChat mention mode config')
-PYCFG
 
 # Message queueing (prevents rapid double-replies; especially helpful on Matrix)
 echo "[doghouse] Configuring messages.queue (collect + debounce)"
