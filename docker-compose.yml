@@ -41,7 +41,7 @@ services:
         # Build from the Qwen source-of-truth branch
         MOLTBOT_REF: feature/qwen-engine
         # Cache-bust so docker build pulls latest branch head when redeploying
-        MOLTBOT_CACHE_BUST: ${MOLTBOT_CACHE_BUST:-1}
+        MOLTBOT_CACHE_BUST: ${MOLTBOT_CACHE_BUST:-2}
     container_name: ${BOT_CANONICAL_NAME:-scoob}-doghouse
     restart: unless-stopped
     depends_on:
@@ -59,7 +59,7 @@ services:
       - ./secrets/github.env
 
     environment:
-      FORCE_DEFAULT_MODEL_OLLAMA: ollama/frob/qwen3-coder-next:80b-a3b-q8_0
+      FORCE_DEFAULT_MODEL_OLLAMA: ollama/frob/qwen3-coder-next:80b-a3b-q8_0-262k
       # Git-backed workspace: rebase Scoob's private workspace branch onto this baseline branch
       DOGHOUSE_WORKSPACE_BASELINE_BRANCH: model/qwen3-coder-next
       # Force dog workspace branch (do NOT leave repo on legacy 'master')
