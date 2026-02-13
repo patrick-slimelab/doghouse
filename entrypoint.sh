@@ -561,6 +561,8 @@ for f in /opt/openclaw/dist/loader-*.js /opt/openclaw/dist/reply-*.js /opt/openc
   perl -0777 -i -pe 's/\} else if \(trimmed\.startsWith\("!"\)\) \{\n\t\trestSource = trimmed\.slice\(1\);\n\t\tif \(restSource\.trimStart\(\)\.startsWith\(":"\)\) restSource = restSource\.trimStart\(\)\.slice\(1\);\n\t\} else return null;/\} else return null;/s' "$f" || true
   # 2) Disable `!` fast-path detection in commands-bash handler
   perl -0777 -i -pe 's/const bashBangRequested = command\.commandBodyNormalized\.startsWith\("!"\);/const bashBangRequested = false;/g' "$f" || true
+  # 3) Suppress disabled-bash warning (return null instead of chat warning)
+  perl -0777 -i -pe 's/if \(params\.cfg\.commands\?\.bash !== true\) return \{ text: "⚠️ bash is disabled\. Set commands\.bash=true to enable\. Docs: https:\/\/docs\.openclaw\.ai\/tools\/slash-commands#config" \};/if (params.cfg.commands?.bash !== true) return null;/g' "$f" || true
 done
 
 # Finally run the gateway as scoob
