@@ -557,7 +557,10 @@ fi
 echo "[doghouse] Patching OpenClaw bash parser: disable !-prefix command trigger"
 for f in /opt/openclaw/dist/loader-*.js /opt/openclaw/dist/reply-*.js /opt/openclaw/dist/extensionAPI.js; do
   [[ -f "$f" ]] || continue
+  # 1) Remove legacy `!` handling from parseBashRequest()
   perl -0777 -i -pe 's/\} else if \(trimmed\.startsWith\("!"\)\) \{\n\t\trestSource = trimmed\.slice\(1\);\n\t\tif \(restSource\.trimStart\(\)\.startsWith\(":"\)\) restSource = restSource\.trimStart\(\)\.slice\(1\);\n\t\} else return null;/\} else return null;/s' "$f" || true
+  # 2) Disable `!` fast-path detection in commands-bash handler
+  perl -0777 -i -pe 's/const bashBangRequested = command\.commandBodyNormalized\.startsWith\("!"\);/const bashBangRequested = false;/g' "$f" || true
 done
 
 # Finally run the gateway as scoob
