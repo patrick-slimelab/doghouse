@@ -276,7 +276,8 @@ gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLA
 gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set agents.defaults.thinkingLevel "off" || true
 
 # Increase timeout for the massive 80B model offloading to CPU
-gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set agents.defaults.timeoutSeconds 180 || true
+# 1200 seconds = 20 minutes
+gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set agents.defaults.timeoutSeconds 1200 || true
 
 # Enforce workspace every boot (fixes legacy configs pointing to /home/node/clawd)
 echo "[doghouse] Enforcing agents.defaults.workspace=$WORKSPACE_DIR"
