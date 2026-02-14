@@ -357,7 +357,7 @@ gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLA
     {
       id: 'gpt-oss:120b',
       name: 'gpt-oss:120b',
-      reasoning: true,
+      reasoning: false,
       input: ['text'],
       contextWindow: 32768,
       maxTokens: 32768
@@ -365,7 +365,7 @@ gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLA
     {
       id: 'gpt-oss:20b',
       name: 'gpt-oss:20b',
-      reasoning: true,
+      reasoning: false,
       input: ['text'],
       contextWindow: 32768,
       maxTokens: 32768
@@ -381,7 +381,7 @@ gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLA
     {
       id: 'heretic',
       name: 'heretic',
-      reasoning: true,
+      reasoning: false,
       input: ['text'],
       contextWindow: 32768,
       maxTokens: 32768
