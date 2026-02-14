@@ -275,6 +275,9 @@ gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLA
 # Force the level to off for all models.
 gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set agents.defaults.thinkingLevel "off" || true
 
+# Increase timeout for the massive 80B model offloading to CPU
+gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set agents.defaults.timeoutSeconds 180 || true
+
 # Enforce workspace every boot (fixes legacy configs pointing to /home/node/clawd)
 echo "[doghouse] Enforcing agents.defaults.workspace=$WORKSPACE_DIR"
 gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set agents.defaults.workspace "$WORKSPACE_DIR" || true
@@ -308,7 +311,7 @@ gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLA
 
 # Message queueing (prevents rapid double-replies; especially helpful on Matrix)
 echo "[doghouse] Configuring messages.queue (collect + debounce)"
-gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set messages.queue '{ mode: "collect", debounceMs: 1500, cap: 20, drop: "summarize" }' --json || true
+gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set messages.queue '{ mode: "collect", debounceMs: 2500, cap: 20, drop: "summarize" }' --json || true
 
 echo "[doghouse] Configuring Matrix channels: open"
 gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set channels.matrix.enabled true || true
