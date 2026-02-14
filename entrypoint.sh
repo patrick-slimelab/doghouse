@@ -292,7 +292,7 @@ gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLA
 
 # Message queueing (prevents rapid double-replies; especially helpful on Matrix)
 echo "[doghouse] Configuring messages.queue (collect + debounce)"
-gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set messages.queue '{ mode: "collect", debounceMs: 1500, cap: 20, drop: "summarize", byChannel: { matrix: "collect", discord: "collect" } }' --json || true
+gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set messages.queue '{ mode: "collect", debounceMs: 1500, cap: 20, drop: "summarize" }' --json || true
 
 echo "[doghouse] Configuring Matrix channels: open"
 gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set channels.matrix.enabled true || true
