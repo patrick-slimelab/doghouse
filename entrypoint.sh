@@ -347,20 +347,28 @@ gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLA
   api: 'openai-completions',
   models: [
     {
+      id: 'qwen3-coder-next:q4_K_M',
+      name: 'qwen3-coder-next:q4_K_M',
+      reasoning: true,
+      input: ['text'],
+      contextWindow: 32768,
+      maxTokens: 32768
+    },
+    {
       id: 'gpt-oss:120b',
       name: 'gpt-oss:120b',
       reasoning: true,
       input: ['text'],
-      contextWindow: 131072,
-      maxTokens: 1310720
+      contextWindow: 32768,
+      maxTokens: 32768
     },
     {
       id: 'gpt-oss:20b',
       name: 'gpt-oss:20b',
       reasoning: true,
       input: ['text'],
-      contextWindow: 131072,
-      maxTokens: 1310720
+      contextWindow: 32768,
+      maxTokens: 32768
     },
     {
       id: 'glm-4.7-flash',
@@ -375,8 +383,8 @@ gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLA
       name: 'heretic',
       reasoning: true,
       input: ['text'],
-      contextWindow: 65536,
-      maxTokens: 655360
+      contextWindow: 32768,
+      maxTokens: 32768
     }
   ]
 }" || true
