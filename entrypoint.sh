@@ -116,24 +116,13 @@ if [[ -f "$CFG_PATH" ]]; then
 fi
 chmod 700 "$STATE_DIR" 2>/dev/null || true
 
-echo "[doghouse] Configuring logging for maximum verbosity"
-gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set logging "{
-  level: 'debug',
-  format: 'json',
-  file: '/tmp/openclaw/openclaw-debug.log',
-  filter: {
-    include: ['*'],
-    exclude: []
-  }
-}" --json || true
-
 # Ensure we aren't dropping messages due to queue summaries
-echo "[doghouse] Configuring messages.queue (collect + debounce + no drop)"
+echo "[doghouse] Configuring messages.queue (collect + debounce)"
 gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set messages.queue "{
   mode: 'collect',
   debounceMs: 500,
   cap: 50,
-  drop: 'none'
+  drop: 'summarize'
 }" --json || true
 
 # --- Dongometer auto-start (managed inside container, no systemd) ---
@@ -282,6 +271,9 @@ fi
 echo "[doghouse] Setting up owners and authorization"
 gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set commands.ownerAllowFrom "['discord:238126776486854656', 'matrix:@shaggy:cclub.cs.wmich.edu']" --json || true
 gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set agents.defaults.thinkingDefault "off" || true
+# Discord doesn't support thinking on this model; Matrix doesn't either.
+# Force the level to off for all models.
+gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set agents.defaults.thinkingLevel "off" || true
 
 # Enforce workspace every boot (fixes legacy configs pointing to /home/node/clawd)
 echo "[doghouse] Enforcing agents.defaults.workspace=$WORKSPACE_DIR"
