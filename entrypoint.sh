@@ -349,7 +349,7 @@ gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLA
     {
       id: 'qwen3-coder-next:q4_K_M',
       name: 'qwen3-coder-next:q4_K_M',
-      reasoning: true,
+      reasoning: false,
       input: ['text'],
       contextWindow: 32768,
       maxTokens: 32768
