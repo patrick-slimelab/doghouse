@@ -42,7 +42,7 @@ services:
         # Pin to the 2026.2.3 release (matches current version in logs)
         MOLTBOT_REF: main
         # Cache-bust so docker build pulls latest branch head/tag when redeploying
-        MOLTBOT_CACHE_BUST: ${MOLTBOT_CACHE_BUST:-8}
+        MOLTBOT_CACHE_BUST: ${MOLTBOT_CACHE_BUST:-9}
     container_name: ${BOT_CANONICAL_NAME:-scoob}-doghouse
     restart: unless-stopped
     depends_on:
