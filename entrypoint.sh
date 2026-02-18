@@ -243,8 +243,19 @@ fi
 # --- Matrix Indexer (Restored from persistent volume) ---
 if [[ -f /home/scoob/matrix-indexer/bin/matrix-indexer ]]; then
   echo "[doghouse] Setting up Matrix Indexer..."
+
+  # Keep search helper script current from image (defaults: omit redacted unless requested).
+  if [[ -f /opt/doghouse/scripts/matrix-indexer-search ]]; then
+    install -m 0755 /opt/doghouse/scripts/matrix-indexer-search /home/scoob/matrix-indexer/bin/matrix-indexer-search
+    chown scoob:scoob /home/scoob/matrix-indexer/bin/matrix-indexer-search
+  fi
+
   ln -sf /home/scoob/matrix-indexer/bin/matrix-indexer /usr/local/bin/matrix-indexer
   ln -sf /home/scoob/matrix-indexer/bin/matrix-indexer-search /usr/local/bin/matrix-indexer-search
+  if [[ -f /opt/doghouse/scripts/matrix-maintenance ]]; then
+    install -m 0755 /opt/doghouse/scripts/matrix-maintenance /usr/local/bin/matrix-maintenance
+    chown scoob:scoob /usr/local/bin/matrix-maintenance
+  fi
   chmod +x /usr/local/bin/matrix-indexer /usr/local/bin/matrix-indexer-search
 
   if [[ -n "${MATRIX_HOMESERVER:-}" ]]; then

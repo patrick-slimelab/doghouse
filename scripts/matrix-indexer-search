@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+QUERY="${1:-}"
+
+if [[ "$QUERY" == "-h" || "$QUERY" == "--help" || -z "$QUERY" ]]; then
+  cat <<HELP
+Usage: matrix-indexer-search <text> [--limit N] [--room ROOM_ID] [--sender SENDER] [--case-sensitive] [--include-redacted]
+
+Options:
+  --limit N            Max rows to return (default: 20)
+  --room ROOM_ID       Restrict to a Matrix room_id
+  --sender SENDER      Restrict to sender mxid
+  --case-sensitive     Case-sensitive regex match (default: insensitive)
+  --include-redacted   Include messages marked is_redacted=true
+
+By default, redacted messages are omitted.
+HELP
+  exit 0
+fi
+
+shift || true
+LIMIT=20
+ROOM=""
+SENDER=""
+CASE_INSENSITIVE=1
+INCLUDE_REDACTED=0
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --limit) LIMIT="$2"; shift 2;;
+    --room) ROOM="$2"; shift 2;;
+    --sender) SENDER="$2"; shift 2;;
+    --case-sensitive) CASE_INSENSITIVE=0; shift;;
+    --include-redacted) INCLUDE_REDACTED=1; shift;;
+    *) echo "Unknown arg: $1" >&2; exit 2;;
+  esac
+done
+
+MONGODB_URI="${MONGODB_URI:-mongodb://mongo:27017}"
+MONGODB_DB="${MONGODB_DB:-matrix_index}"
+
+OPTS="i"
+[[ "$CASE_INSENSITIVE" == "0" ]] && OPTS=""
+
+regexFilter="{ \"content.body\": { \"\$regex\": \"${QUERY//\"/\\\"}\", \"\$options\": \"$OPTS\" } }"
+filters="$regexFilter"
+
+if [[ "$INCLUDE_REDACTED" != "1" ]]; then
+  filters="{ \$and: [ $filters, { \$or: [ { is_redacted: { \$exists: false } }, { is_redacted: false } ] } ] }"
+fi
+
+[[ -n "$ROOM" ]] && filters="{ \$and: [ $filters, { room_id: \"$ROOM\" } ] }"
+[[ -n "$SENDER" ]] && filters="{ \$and: [ $filters, { sender: \"$SENDER\" } ] }"
+
+JS="
+var cursor = db.events.find($filters).sort({origin_server_ts: -1}).limit($LIMIT);
+cursor.forEach(doc => {
+  var ts = doc.origin_server_ts;
+  if (typeof ts === 'object' && ts.toNumber) ts = ts.toNumber();
+  var date = new Date(Number(ts) || 0).toISOString();
+  var body = (doc.content && doc.content.body) ? doc.content.body : '';
+  var mark = doc.is_redacted ? ' [REDACTED]' : '';
+  print(\`[\${date}] \${doc.sender} in \${doc.room_id}\${mark}: \${body}\`);
+});
+"
+
+if command -v mongosh >/dev/null 2>&1; then
+  mongosh "$MONGODB_URI/$MONGODB_DB" --quiet --eval "$JS"
+else
+  echo "ERROR: mongosh not found." >&2
+  exit 1
+fi
