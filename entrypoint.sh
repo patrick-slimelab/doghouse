@@ -340,7 +340,7 @@ gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLA
 gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set agents.defaults.thinkingDefault "off" || true
 # Discord doesn't support thinking on this model; Matrix doesn't either.
 # Force the level to off for all models.
-gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set agents.defaults.thinkingLevel "off" || true
+# thinkingLevel key is not supported on this OpenClaw build; keep thinkingDefault only.
 
 # Increase timeout for the massive 80B model offloading to CPU
 # 1200 seconds = 20 minutes
