@@ -499,6 +499,9 @@ EOF
     chown scoob:scoob /home/scoob/matrix-indexer/.env
     chmod 600 /home/scoob/matrix-indexer/.env
     
+    # Clean up any stale indexer processes before relaunching.
+    gosu scoob bash -lc 'pkill -f "/usr/local/bin/matrix-indexer" >/dev/null 2>&1 || true'
+
     echo "[doghouse] Starting Matrix Indexer #1 in background..."
     # Using nohup to run in background, detached from this shell
     gosu scoob bash -c "cd /home/scoob/matrix-indexer && set -a && source .env && export INDEXER_ID='${MATRIX_USER_ID}' INDEXER_SYNC_TOKEN_PATH='/home/scoob/sync_token.txt' && set +a && nohup /usr/local/bin/matrix-indexer > /tmp/indexer.log 2>&1 &" &
@@ -524,9 +527,11 @@ EOF
     fi
 
     sleep 1
-    echo "[doghouse] Matrix Indexer process launch attempted (PID check in 2 seconds)"
+    echo "[doghouse] Matrix Indexer process launch attempted"
+    gosu scoob bash -lc 'pgrep -af "/usr/local/bin/matrix-indexer" || true'
+
     echo "[doghouse] Starting Matrix maintenance (stale backfill reaper + room cache)"
-    gosu scoob bash -lc 'nohup /usr/local/bin/matrix-maintenance > /tmp/matrix-maintenance.log 2>&1 &'
+    gosu scoob bash -lc 'pkill -f "/usr/local/bin/matrix-maintenance" >/dev/null 2>&1 || true; nohup /usr/local/bin/matrix-maintenance > /tmp/matrix-maintenance.log 2>&1 &'
   else
     echo "[doghouse] Warn: MATRIX_HOMESERVER not set, skipping indexer start."
   fi
