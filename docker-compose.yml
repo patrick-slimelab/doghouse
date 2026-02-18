@@ -54,6 +54,8 @@ services:
     # Allow container to reach host services without --network=host
     extra_hosts:
       - "host.docker.internal:host-gateway"
+      - "cclub.cs.wmich.edu:141.218.143.78"
+      - "matrix.cclub.cs.wmich.edu:141.218.143.78"
 
     # Pre-auth GitHub CLI via GH_TOKEN in ./secrets/github.env
     env_file:
