@@ -5,12 +5,14 @@ QUERY="${1:-}"
 
 if [[ "$QUERY" == "-h" || "$QUERY" == "--help" || -z "$QUERY" ]]; then
   cat <<HELP
-Usage: matrix-indexer-search <text> [--limit N] [--room ROOM_ID] [--sender SENDER] [--case-sensitive] [--include-redacted]
+Usage: matrix-indexer-search <text> [--limit N] [--room ROOM_ID] [--sender SENDER] [--from ISO|unix_ms] [--to ISO|unix_ms] [--case-sensitive] [--include-redacted]
 
 Options:
   --limit N            Max rows to return (default: 20)
   --room ROOM_ID       Restrict to a Matrix room_id
   --sender SENDER      Restrict to sender mxid
+  --from TIME          Lower time bound (inclusive). Accepts ISO-8601 or unix ms.
+  --to TIME            Upper time bound (inclusive). Accepts ISO-8601 or unix ms.
   --case-sensitive     Case-sensitive regex match (default: insensitive)
   --include-redacted   Include messages marked is_redacted=true
 
@@ -23,6 +25,8 @@ shift || true
 LIMIT=20
 ROOM=""
 SENDER=""
+FROM_TIME=""
+TO_TIME=""
 CASE_INSENSITIVE=1
 INCLUDE_REDACTED=0
 
@@ -31,6 +35,8 @@ while [[ $# -gt 0 ]]; do
     --limit) LIMIT="$2"; shift 2;;
     --room) ROOM="$2"; shift 2;;
     --sender) SENDER="$2"; shift 2;;
+    --from) FROM_TIME="$2"; shift 2;;
+    --to) TO_TIME="$2"; shift 2;;
     --case-sensitive) CASE_INSENSITIVE=0; shift;;
     --include-redacted) INCLUDE_REDACTED=1; shift;;
     *) echo "Unknown arg: $1" >&2; exit 2;;
@@ -50,8 +56,38 @@ if [[ "$INCLUDE_REDACTED" != "1" ]]; then
   filters="{ \$and: [ $filters, { \$or: [ { is_redacted: { \$exists: false } }, { is_redacted: false } ] } ] }"
 fi
 
+to_epoch_ms() {
+  local raw="$1"
+  [[ -z "$raw" ]] && return 0
+  if [[ "$raw" =~ ^[0-9]{10,13}$ ]]; then
+    # 10-digit seconds or 13-digit milliseconds
+    if [[ ${#raw} -eq 10 ]]; then
+      echo "$((raw * 1000))"
+    else
+      echo "$raw"
+    fi
+    return 0
+  fi
+  date -d "$raw" +%s%3N 2>/dev/null || {
+    echo "ERROR: invalid time '$raw' (use ISO-8601 or unix ms)" >&2
+    exit 2
+  }
+}
+
+FROM_MS=""
+TO_MS=""
+[[ -n "$FROM_TIME" ]] && FROM_MS="$(to_epoch_ms "$FROM_TIME")"
+[[ -n "$TO_TIME" ]] && TO_MS="$(to_epoch_ms "$TO_TIME")"
+
 [[ -n "$ROOM" ]] && filters="{ \$and: [ $filters, { room_id: \"$ROOM\" } ] }"
 [[ -n "$SENDER" ]] && filters="{ \$and: [ $filters, { sender: \"$SENDER\" } ] }"
+if [[ -n "$FROM_MS" && -n "$TO_MS" ]]; then
+  filters="{ \$and: [ $filters, { origin_server_ts: { \$gte: NumberLong(\"$FROM_MS\"), \$lte: NumberLong(\"$TO_MS\") } } ] }"
+elif [[ -n "$FROM_MS" ]]; then
+  filters="{ \$and: [ $filters, { origin_server_ts: { \$gte: NumberLong(\"$FROM_MS\") } } ] }"
+elif [[ -n "$TO_MS" ]]; then
+  filters="{ \$and: [ $filters, { origin_server_ts: { \$lte: NumberLong(\"$TO_MS\") } } ] }"
+fi
 
 JS="
 var cursor = db.events.find($filters).sort({origin_server_ts: -1}).limit($LIMIT);
