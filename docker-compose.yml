@@ -37,12 +37,12 @@ services:
     build:
       context: .
       args:
-        # Use upstream OpenClaw for a fresh, known-good engine
-        MOLTBOT_REPO: https://github.com/slimelab-ai/openpaw.git
-        # Pin to the 2026.2.3 release (matches current version in logs)
-        MOLTBOT_REF: main
-        # Cache-bust so docker build pulls latest branch head/tag when redeploying
-        MOLTBOT_CACHE_BUST: ${MOLTBOT_CACHE_BUST:-11}
+        # Use upstream OpenClaw release and keep doghouse customizations on top
+        MOLTBOT_REPO: https://github.com/openclaw/openclaw.git
+        # Pin to latest stable release tag
+        MOLTBOT_REF: v2026.2.23
+        # Cache-bust so docker build pulls the new release when redeploying
+        MOLTBOT_CACHE_BUST: ${MOLTBOT_CACHE_BUST:-18}
     container_name: ${BOT_CANONICAL_NAME:-scoob}-doghouse
     restart: unless-stopped
     depends_on:
