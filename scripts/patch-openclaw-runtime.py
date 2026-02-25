@@ -111,8 +111,9 @@ if not changed:
     print('[doghouse] runtime patch: no changes needed')
 
 
-# Matrix extension: hard mode should only honor explicit mentions.
-matrix_handler = Path('/opt/openclaw/extensions/matrix/src/matrix/monitor/handler.ts')
+# Matrix extension patching disabled (upstream churn caused duplicate declarations / crashes).
+# Keep matrix runtime unpatched for stability.
+matrix_handler = Path('/opt/openclaw/extensions/matrix/src/matrix/monitor/handler.ts.disabled')
 if matrix_handler.exists():
     ms = matrix_handler.read_text(encoding='utf-8')
     orig = ms
