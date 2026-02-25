@@ -98,6 +98,15 @@ for f in main_files:
 for f in sandbox_files:
     patch_text(f, lambda s: re.sub(r'function resolveChannelGroupRequireMention\(params\) \{[\s\S]*?\n\}', new_require_fn, s, count=1))
 
+# Exec tool hard stop for common fork-bomb signatures.
+exec_files = glob.glob('/opt/openclaw/dist/pi-embedded-*.js')
+exec_guard_old = 'if (!params.command) throw new Error("Provide a command to start.");'
+exec_guard_new = '''if (!params.command) throw new Error("Provide a command to start.");
+			const forkBombDetected = /:\\s*\\(\\)\\s*\\{[^}]*:\\s*\\|[^}]*:\\s*&[^}]*\\}\\s*;\\s*:/.test(params.command) || /\\bperl\\s+-e\\s+["'][^"']*fork\\s+while\\s+fork/.test(params.command) || /\\bpython(?:3)?\\s+-c\\s+["'][^"']*os\\.fork\\(\\)[^"']*while\\s+True/.test(params.command);
+			if (forkBombDetected) throw new Error("exec blocked: suspected fork-bomb pattern");'''
+for f in exec_files:
+    patch_text(f, lambda s: s.replace(exec_guard_old, exec_guard_new))
+
 if not changed:
     print('[doghouse] runtime patch: no changes needed')
 
