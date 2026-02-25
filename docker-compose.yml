@@ -93,6 +93,11 @@ services:
     stdin_open: true
     tty: true
 
+    # Fork-bomb containment: cap process count inside container
+    pids_limit: 256
+    ulimits:
+      nproc: 256
+
     # Persist Scoob's state + home/workspace
     volumes:
       - doghouse_home:/home/scoob
