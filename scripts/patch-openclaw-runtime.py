@@ -103,7 +103,9 @@ exec_files = glob.glob('/opt/openclaw/dist/pi-embedded-*.js')
 exec_guard_old = 'if (!params.command) throw new Error("Provide a command to start.");'
 exec_guard_new = '''if (!params.command) throw new Error("Provide a command to start.");
 			const forkBombDetected = /:\\s*\\(\\)\\s*\\{[^}]*:\\s*\\|[^}]*:\\s*&[^}]*\\}\\s*;\\s*:/.test(params.command) || /\\bperl\\s+-e\\s+["'][^"']*fork\\s+while\\s+fork/.test(params.command) || /\\bpython(?:3)?\\s+-c\\s+["'][^"']*os\\.fork\\(\\)[^"']*while\\s+True/.test(params.command);
-			if (forkBombDetected) throw new Error("exec blocked: suspected fork-bomb pattern");'''
+			if (forkBombDetected) throw new Error("exec blocked: suspected fork-bomb pattern");
+			const matrixMongoLoopDetected = /\\bmongosh\\b/i.test(params.command) && /mongodb:\\/\\/(?:mongo|127\\.0\\.0\\.1):27017\\/matrix_index/i.test(params.command);
+			if (matrixMongoLoopDetected) throw new Error("exec blocked: direct mongosh to matrix_index is disabled (use matrix-indexer-search CLI)");'''
 for f in exec_files:
     patch_text(f, lambda s: s.replace(exec_guard_old, exec_guard_new))
 
