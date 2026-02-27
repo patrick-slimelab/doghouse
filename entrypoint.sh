@@ -446,6 +446,14 @@ gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLA
   api: 'openai-completions',
   models: [
     {
+      id: 'qwen3.5:35b',
+      name: 'qwen3.5:35b',
+      reasoning: false,
+      input: ['text'],
+      contextWindow: 32768,
+      maxTokens: 32768
+    },
+    {
       id: 'qwen3-coder-next:q4_K_M',
       name: 'qwen3-coder-next:q4_K_M',
       reasoning: false,

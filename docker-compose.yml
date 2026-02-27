@@ -62,7 +62,7 @@ services:
       - ./secrets/github.env
 
     environment:
-      FORCE_DEFAULT_MODEL_OLLAMA: ollama/huihui_ai/qwen3-coder-next-abliterated:q4_K
+      FORCE_DEFAULT_MODEL_OLLAMA: ollama/qwen3.5:35b
       # Git-backed workspace: rebase Scoob's private workspace branch onto this baseline branch
       DOGHOUSE_WORKSPACE_BASELINE_BRANCH: model/qwen3-coder-next
       # Force dog workspace branch (do NOT leave repo on legacy 'master')
