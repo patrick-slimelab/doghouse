@@ -436,15 +436,24 @@ if [[ -n "${OPENAI_BASE_URL:-}" ]]; then
   fi
 fi
 
-# Configure Ollama provider (port 11434)
-FORCE_DEFAULT_MODEL_OLLAMA="${FORCE_DEFAULT_MODEL_OLLAMA:-ollama/gpt-oss:20b}"
+# Configure OpenAI-compatible local provider (llama.cpp / Ollama)
+FORCE_DEFAULT_MODEL_OLLAMA="${FORCE_DEFAULT_MODEL_OLLAMA:-ollama/huihui-qwen3.5-35b-a3b-Q4_K_M.v2.gguf}"
+OLLAMA_BASE_URL="${OLLAMA_BASE_URL:-http://host.docker.internal:8013/v1}"
 
-echo "[doghouse] Configuring Ollama provider -> http://host.docker.internal:11434/v1"
+echo "[doghouse] Configuring Ollama provider -> ${OLLAMA_BASE_URL}"
 gosu scoob env HOME=/home/scoob OPENCLAW_STATE_DIR=/home/scoob/.openclaw OPENCLAW_CONFIG_PATH=/home/scoob/.openclaw/openclaw.json /usr/local/bin/openclaw config set models.providers.ollama "{
-  baseUrl: 'http://host.docker.internal:11434/v1',
+  baseUrl: '${OLLAMA_BASE_URL}',
   apiKey: 'ollama-local',
   api: 'openai-completions',
   models: [
+    {
+      id: 'huihui-qwen3.5-35b-a3b-Q4_K_M.v2.gguf',
+      name: 'huihui-qwen3.5-35b-a3b-Q4_K_M.v2.gguf',
+      reasoning: false,
+      input: ['text'],
+      contextWindow: 262144,
+      maxTokens: 4096
+    },
     {
       id: 'qwen3.5:35b',
       name: 'qwen3.5:35b',
