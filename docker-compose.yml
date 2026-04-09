@@ -62,7 +62,7 @@ services:
       - ./secrets/github.env
 
     environment:
-      FORCE_DEFAULT_MODEL_OLLAMA: ollama/huihui-qwen3.5-35b-a3b-Q4_K_M.v2.gguf
+      FORCE_DEFAULT_MODEL_OLLAMA: ollama/gemma4:31b
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:8013/v1}
       # Git-backed workspace: rebase Scoob's private workspace branch onto this baseline branch
       DOGHOUSE_WORKSPACE_BASELINE_BRANCH: model/qwen3-coder-next
