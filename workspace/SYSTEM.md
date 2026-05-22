@@ -43,9 +43,26 @@ matrix-indexer-search "hello" --sender "@alice:server"
 
 # Search by room
 matrix-indexer-search "hello" --room "!roomid:server"
+
+# Search with surrounding context: 5 messages before, 2 messages after
+matrix-indexer-search "some string" --context-before 5 --context-after 2
+
+# Short flags for context windows
+matrix-indexer-search "some string" -B 5 -A 2
+
+# Same number of messages before and after
+matrix-indexer-search "some string" --context 4
 ```
 
-### Direct MongoDB (advanced):
+### Context windows
+Use context flags first when you need to understand what people were talking about around a match. Hand-written MongoDB is still fine for advanced/custom queries, but this common before/after context case is built into the CLI.
+
+- `--context-before N` / `-B N` = include N earlier messages from the same room.
+- `--context-after N` / `-A N` = include N later messages from the same room.
+- `--context N` / `-C N` = include N messages before and after.
+- Matched lines are prefixed with `> `; surrounding context lines are prefixed with two spaces.
+
+### Direct MongoDB (advanced/custom queries):
 ```bash
 mongosh "$MONGODB_URI/$MONGODB_DB" --eval "db.events.find({'content.body': {\$regex: 'search term', \$options: 'i'}}).sort({origin_server_ts: -1}).limit(20)"
 ```

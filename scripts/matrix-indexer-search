@@ -1,27 +1,67 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Search matrix-indexer MongoDB for message content.
+#
+# Examples:
+#   matrix-indexer-search "keyword" --limit 20
+#   matrix-indexer-search "deploy" --room '!room:example.org' --from 2026-04-01
+#   matrix-indexer-search "some string" --context-before 5 --context-after 2
+#   matrix-indexer-search ".*" --oldest --limit 5
+#   matrix-indexer-search --stats
+#
+# Env (optional):
+#   MONGODB_URI=mongodb://127.0.0.1:27017
+#   MONGODB_DB=matrix_index
+#   MONGO_CONTAINER_NAME=matrix-indexer-mongo
+
+usage() {
+  cat <<'EOF'
+Usage:
+  matrix-indexer-search <regex> [--limit N] [--room ROOM_ID] [--sender MXID] [--from TIME] [--to TIME] [--oldest|--newest] [--case-sensitive] [--include-redacted] [--context-before N] [--context-after N]
+  matrix-indexer-search --stats
+
+Searches the matrix-indexer MongoDB for m.room.message events whose content.body matches <regex>.
+
+Defaults:
+  Search results are newest-first. Use --oldest when checking the earliest indexed message.
+
+TIME may be ISO-8601/date text parseable by JavaScript Date.parse, or unix epoch milliseconds.
+
+Context:
+  --context-before N, -B N  Include N messages before each match in the same room
+  --context-after N, -A N   Include N messages after each match in the same room
+  --context N, -C N         Include N messages before and after each match
+
+Matched lines are prefixed with "> "; context lines are prefixed with two spaces.
+
+Examples:
+  matrix-indexer-search "error" --limit 20
+  matrix-indexer-search "some string" --context-before 5 --context-after 2
+  matrix-indexer-search "some string" -B 5 -A 2
+  matrix-indexer-search ".*" --oldest --limit 1
+  matrix-indexer-search --stats
+
+Env (optional):
+  MONGODB_URI=mongodb://127.0.0.1:27017
+  MONGODB_DB=matrix_index
+  MONGO_CONTAINER_NAME=matrix-indexer-mongo
+EOF
+}
+
+MODE="search"
 QUERY="${1:-}"
-
-if [[ "$QUERY" == "-h" || "$QUERY" == "--help" || -z "$QUERY" ]]; then
-  cat <<HELP
-Usage: matrix-indexer-search <text> [--limit N] [--room ROOM_ID] [--sender SENDER] [--from ISO|unix_ms] [--to ISO|unix_ms] [--case-sensitive] [--include-redacted]
-
-Options:
-  --limit N            Max rows to return (default: 20)
-  --room ROOM_ID       Restrict to a Matrix room_id
-  --sender SENDER      Restrict to sender mxid
-  --from TIME          Lower time bound (inclusive). Accepts ISO-8601 or unix ms.
-  --to TIME            Upper time bound (inclusive). Accepts ISO-8601 or unix ms.
-  --case-sensitive     Case-sensitive regex match (default: insensitive)
-  --include-redacted   Include messages marked is_redacted=true
-
-By default, redacted messages are omitted.
-HELP
+if [[ "$QUERY" == "--stats" ]]; then
+  MODE="stats"
+  QUERY=""
+  shift || true
+elif [[ "$QUERY" == "-h" || "$QUERY" == "--help" || -z "$QUERY" ]]; then
+  usage
   exit 0
+else
+  shift || true
 fi
 
-shift || true
 LIMIT=20
 ROOM=""
 SENDER=""
@@ -29,81 +69,257 @@ FROM_TIME=""
 TO_TIME=""
 CASE_INSENSITIVE=1
 INCLUDE_REDACTED=0
+SORT_DIR=-1
+CONTEXT_BEFORE=0
+CONTEXT_AFTER=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --limit) LIMIT="$2"; shift 2;;
-    --room) ROOM="$2"; shift 2;;
-    --sender) SENDER="$2"; shift 2;;
-    --from) FROM_TIME="$2"; shift 2;;
-    --to) TO_TIME="$2"; shift 2;;
-    --case-sensitive) CASE_INSENSITIVE=0; shift;;
-    --include-redacted) INCLUDE_REDACTED=1; shift;;
-    *) echo "Unknown arg: $1" >&2; exit 2;;
+    --stats)
+      MODE="stats"; shift;;
+    --limit)
+      LIMIT="${2:-}"; shift 2;;
+    --room)
+      ROOM="${2:-}"; shift 2;;
+    --sender)
+      SENDER="${2:-}"; shift 2;;
+    --from)
+      FROM_TIME="${2:-}"; shift 2;;
+    --to)
+      TO_TIME="${2:-}"; shift 2;;
+    --oldest|--asc|--ascending)
+      SORT_DIR=1; shift;;
+    --newest|--desc|--descending)
+      SORT_DIR=-1; shift;;
+    --case-sensitive)
+      CASE_INSENSITIVE=0; shift;;
+    --include-redacted)
+      INCLUDE_REDACTED=1; shift;;
+    --context-before|-B)
+      CONTEXT_BEFORE="${2:-}"; shift 2;;
+    --context-after|-A)
+      CONTEXT_AFTER="${2:-}"; shift 2;;
+    --context|-C)
+      CONTEXT_BEFORE="${2:-}"; CONTEXT_AFTER="${2:-}"; shift 2;;
+    -h|--help)
+      usage; exit 0;;
+    *)
+      echo "Unknown arg: $1" >&2
+      usage >&2
+      exit 2;;
   esac
 done
 
-MONGODB_URI="${MONGODB_URI:-mongodb://mongo:27017}"
-MONGODB_DB="${MONGODB_DB:-matrix_index}"
-
-OPTS="i"
-[[ "$CASE_INSENSITIVE" == "0" ]] && OPTS=""
-
-regexFilter="{ \"content.body\": { \"\$regex\": \"${QUERY//\"/\\\"}\", \"\$options\": \"$OPTS\" } }"
-filters="$regexFilter"
-
-if [[ "$INCLUDE_REDACTED" != "1" ]]; then
-  filters="{ \$and: [ $filters, { \$or: [ { is_redacted: { \$exists: false } }, { is_redacted: false } ] } ] }"
+if ! [[ "$LIMIT" =~ ^[0-9]+$ ]]; then
+  echo "ERROR: --limit must be a non-negative integer" >&2
+  exit 2
 fi
 
-to_epoch_ms() {
-  local raw="$1"
-  [[ -z "$raw" ]] && return 0
-  if [[ "$raw" =~ ^[0-9]{10,13}$ ]]; then
-    # 10-digit seconds or 13-digit milliseconds
-    if [[ ${#raw} -eq 10 ]]; then
-      echo "$((raw * 1000))"
-    else
-      echo "$raw"
-    fi
-    return 0
+if ! [[ "$CONTEXT_BEFORE" =~ ^[0-9]+$ ]]; then
+  echo "ERROR: --context-before/-B must be a non-negative integer" >&2
+  exit 2
+fi
+
+if ! [[ "$CONTEXT_AFTER" =~ ^[0-9]+$ ]]; then
+  echo "ERROR: --context-after/-A must be a non-negative integer" >&2
+  exit 2
+fi
+
+if [[ "$MODE" == "search" && -z "$QUERY" ]]; then
+  echo "ERROR: missing search regex (or use --stats)" >&2
+  usage >&2
+  exit 2
+fi
+
+MONGODB_URI="${MONGODB_URI:-mongodb://127.0.0.1:27017}"
+MONGODB_DB="${MONGODB_DB:-matrix_index}"
+MONGO_CONTAINER_NAME="${MONGO_CONTAINER_NAME:-matrix-indexer-mongo}"
+
+json_string() {
+  local value="$1"
+  if command -v python3 >/dev/null 2>&1; then
+    VALUE="$value" python3 - <<'PY'
+import json, os
+print(json.dumps(os.environ.get('VALUE', '')))
+PY
+  elif command -v node >/dev/null 2>&1; then
+    VALUE="$value" node -e 'process.stdout.write(JSON.stringify(process.env.VALUE || "") + "\n")'
+  else
+    # Minimal fallback: enough for typical Matrix IDs/search text.
+    printf '"%s"' "$(printf '%s' "$value" | sed 's/\\/\\\\/g; s/"/\\"/g')"
   fi
-  date -d "$raw" +%s%3N 2>/dev/null || {
-    echo "ERROR: invalid time '$raw' (use ISO-8601 or unix ms)" >&2
-    exit 2
-  }
 }
 
-FROM_MS=""
-TO_MS=""
-[[ -n "$FROM_TIME" ]] && FROM_MS="$(to_epoch_ms "$FROM_TIME")"
-[[ -n "$TO_TIME" ]] && TO_MS="$(to_epoch_ms "$TO_TIME")"
+DB_JSON="$(json_string "$MONGODB_DB")"
 
-[[ -n "$ROOM" ]] && filters="{ \$and: [ $filters, { room_id: \"$ROOM\" } ] }"
-[[ -n "$SENDER" ]] && filters="{ \$and: [ $filters, { sender: \"$SENDER\" } ] }"
-if [[ -n "$FROM_MS" && -n "$TO_MS" ]]; then
-  filters="{ \$and: [ $filters, { origin_server_ts: { \$gte: NumberLong(\"$FROM_MS\"), \$lte: NumberLong(\"$TO_MS\") } } ] }"
-elif [[ -n "$FROM_MS" ]]; then
-  filters="{ \$and: [ $filters, { origin_server_ts: { \$gte: NumberLong(\"$FROM_MS\") } } ] }"
-elif [[ -n "$TO_MS" ]]; then
-  filters="{ \$and: [ $filters, { origin_server_ts: { \$lte: NumberLong(\"$TO_MS\") } } ] }"
-fi
-
-JS="
-var cursor = db.events.find($filters).sort({origin_server_ts: -1}).limit($LIMIT);
-cursor.forEach(doc => {
-  var ts = doc.origin_server_ts;
-  if (typeof ts === 'object' && ts.toNumber) ts = ts.toNumber();
-  var date = new Date(Number(ts) || 0).toISOString();
-  var body = (doc.content && doc.content.body) ? doc.content.body : '';
-  var mark = doc.is_redacted ? ' [REDACTED]' : '';
-  print(\`[\${date}] \${doc.sender} in \${doc.room_id}\${mark}: \${body}\`);
-});
-"
-
-if command -v mongosh >/dev/null 2>&1; then
-  mongosh "$MONGODB_URI/$MONGODB_DB" --quiet --eval "$JS"
+if [[ "$MODE" == "stats" ]]; then
+  JS="const dbname=${DB_JSON};
+const d = db.getSiblingDB(dbname);
+const events = d.getCollection('events');
+const bf = d.getCollection('room_backfill');
+function asMs(x) { return typeof x === 'number' ? x : (x && x.toNumber ? x.toNumber() : Number(x)); }
+function iso(x) {
+  const n = asMs(x);
+  return Number.isFinite(n) ? new Date(n).toISOString() : '';
+}
+function one(cursor) {
+  const arr = cursor.limit(1).toArray();
+  if (!arr.length) return null;
+  const x = arr[0];
+  return { iso: iso(x.origin_server_ts), room_id: x.room_id || '', sender: x.sender || '', event_id: x.event_id || '', body: (x.content && x.content.body ? String(x.content.body).replace(/\n/g, ' ').slice(0, 160) : '') };
+}
+const oldest = one(events.find({ type: 'm.room.message', origin_server_ts: { \$exists: true } }, { origin_server_ts: 1, room_id: 1, sender: 1, event_id: 1, 'content.body': 1 }).sort({ origin_server_ts: 1 }));
+const newest = one(events.find({ type: 'm.room.message', origin_server_ts: { \$exists: true } }, { origin_server_ts: 1, room_id: 1, sender: 1, event_id: 1, 'content.body': 1 }).sort({ origin_server_ts: -1 }));
+const yearCounts = events.aggregate([
+  { \$match: { type: 'm.room.message', origin_server_ts: { \$type: 'number' } } },
+  { \$project: { year: { \$year: { \$toDate: '\$origin_server_ts' } } } },
+  { \$group: { _id: '\$year', count: { \$sum: 1 } } },
+  { \$sort: { _id: 1 } }
+]).toArray();
+print('db\t' + dbname);
+print('events\t' + events.countDocuments({}));
+print('messages\t' + events.countDocuments({ type: 'm.room.message' }));
+print('oldest_message\t' + (oldest ? [oldest.iso, oldest.room_id, oldest.sender, oldest.event_id, oldest.body].join('\t') : ''));
+print('newest_message\t' + (newest ? [newest.iso, newest.room_id, newest.sender, newest.event_id, newest.body].join('\t') : ''));
+print('backfill_rooms_total\t' + bf.countDocuments({}));
+print('backfill_rooms_done\t' + bf.countDocuments({ done: true }));
+print('backfill_rooms_remaining\t' + bf.countDocuments({ done: { \$ne: true } }));
+print('backfill_rooms_errored\t' + bf.countDocuments({ error_count: { \$gt: 0 }, done: { \$ne: true } }));
+print('messages_by_year\t' + yearCounts.map(x => x._id + ':' + x.count).join(','));"
 else
-  echo "ERROR: mongosh not found." >&2
-  exit 1
+  QUERY_JSON="$(json_string "$QUERY")"
+  ROOM_JSON="$(json_string "$ROOM")"
+  SENDER_JSON="$(json_string "$SENDER")"
+  FROM_JSON="$(json_string "$FROM_TIME")"
+  TO_JSON="$(json_string "$TO_TIME")"
+
+  OPTS="i"
+  if [[ "$CASE_INSENSITIVE" == "0" ]]; then
+    OPTS=""
+  fi
+  OPTS_JSON="$(json_string "$OPTS")"
+
+  JS="const dbname=${DB_JSON};
+const query=${QUERY_JSON};
+const room=${ROOM_JSON};
+const sender=${SENDER_JSON};
+const fromText=${FROM_JSON};
+const toText=${TO_JSON};
+const opts=${OPTS_JSON};
+const includeRedacted=${INCLUDE_REDACTED} === 1;
+const limit=${LIMIT};
+const sortDir=${SORT_DIR};
+const contextBefore=${CONTEXT_BEFORE};
+const contextAfter=${CONTEXT_AFTER};
+function parseTime(v) {
+  if (!v) return null;
+  if (/^[0-9]+$/.test(v)) return Number(v);
+  const ms = Date.parse(v);
+  if (Number.isNaN(ms)) throw new Error('Could not parse time: ' + v);
+  return ms;
+}
+function asMs(x) { return typeof x === 'number' ? x : (x && x.toNumber ? x.toNumber() : Number(x)); }
+function iso(x) {
+  const n = asMs(x);
+  return Number.isFinite(n) ? new Date(n).toISOString() : '';
+}
+const filter = {
+  type: 'm.room.message',
+  'content.body': { \$regex: query, \$options: opts }
+};
+if (!includeRedacted) filter.is_redacted = { \$ne: true };
+if (room) filter.room_id = room;
+if (sender) filter.sender = sender;
+const fromMs = parseTime(fromText);
+const toMs = parseTime(toText);
+if (fromMs !== null || toMs !== null) {
+  filter.origin_server_ts = {};
+  if (fromMs !== null) filter.origin_server_ts.\$gte = fromMs;
+  if (toMs !== null) filter.origin_server_ts.\$lte = toMs;
+}
+const col = db.getSiblingDB(dbname).getCollection('events');
+const projection = {
+  event_id: 1,
+  room_id: 1,
+  sender: 1,
+  origin_server_ts: 1,
+  'content.body': 1,
+  is_redacted: 1,
+};
+function line(d, prefix) {
+  const ts = d.origin_server_ts ? iso(d.origin_server_ts) : '';
+  const body = d.content && d.content.body ? String(d.content.body).replace(/\n/g, ' ') : '';
+  return prefix + [ts, d.room_id || '', d.sender || '', d.event_id || '', body].join('\t');
+}
+const matches = col.find(filter, projection)
+  .sort({ origin_server_ts: sortDir })
+  .limit(limit)
+  .toArray();
+
+matches.forEach((d, idx) => {
+  if (!contextBefore && !contextAfter) {
+    print(line(d, ''));
+    return;
+  }
+
+  if (idx > 0) print('');
+  const ts = asMs(d.origin_server_ts);
+  const baseContext = { type: 'm.room.message', room_id: d.room_id };
+  if (!includeRedacted) baseContext.is_redacted = { \$ne: true };
+
+  let before = [];
+  if (contextBefore > 0) {
+    before = col.find({ ...baseContext, origin_server_ts: { \$lt: ts } }, projection)
+      .sort({ origin_server_ts: -1 })
+      .limit(contextBefore)
+      .toArray()
+      .reverse();
+  }
+
+  let after = [];
+  if (contextAfter > 0) {
+    after = col.find({ ...baseContext, origin_server_ts: { \$gt: ts } }, projection)
+      .sort({ origin_server_ts: 1 })
+      .limit(contextAfter)
+      .toArray();
+  }
+
+  before.forEach(x => print(line(x, '  ')));
+  print(line(d, '> '));
+  after.forEach(x => print(line(x, '  ')));
+});"
 fi
+
+docker_cmd() {
+  if command -v docker >/dev/null 2>&1 && docker ps >/dev/null 2>&1; then
+    echo "docker"
+    return
+  fi
+  if command -v sudo >/dev/null 2>&1 && sudo -n docker ps >/dev/null 2>&1; then
+    echo "sudo -n docker"
+    return
+  fi
+  echo ""
+}
+
+run_mongosh() {
+  if command -v mongosh >/dev/null 2>&1; then
+    mongosh "$MONGODB_URI" --quiet --eval "$JS"
+    return
+  fi
+
+  local dcmd
+  dcmd="$(docker_cmd)"
+  if [[ -n "$dcmd" ]]; then
+    if $dcmd ps --format '{{.Names}}' | grep -qx "$MONGO_CONTAINER_NAME"; then
+      $dcmd exec -i "$MONGO_CONTAINER_NAME" mongosh "$MONGODB_URI" --quiet --eval "$JS"
+      return
+    fi
+  fi
+
+  echo "ERROR: mongosh not found and mongo container '$MONGO_CONTAINER_NAME' not accessible." >&2
+  echo "Install mongosh, run with sudo, or set MONGO_CONTAINER_NAME to the running container." >&2
+  exit 1
+}
+
+run_mongosh
